@@ -117,6 +117,11 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
       st.addTurn({ role: 'user', content: msg.content, at: Date.now(), persona: st.session.persona });
 
       const { text, usage } = await chat.send(turnText, (t) => send({ type: 'chat:delta', text: t }));
+      // An empty reply (stream cut off before any text) must be treated as a
+      // failure: recording it — or keeping the runtime — would poison the
+      // session transcript with an empty assistant block, and the API then
+      // rejects every later turn with "text content blocks must be non-empty".
+      if (!text.trim()) throw new Error('The model returned an empty reply — send that again.');
 
       const turn: Turn = { role: 'assistant', content: text, at: Date.now(), persona: st.session.persona };
       st.addTurn(turn);
@@ -133,6 +138,11 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         })
         .catch((err) => console.error('compaction failed:', err));
     } catch (err) {
+      // Never reuse a runtime whose turn failed: an interrupted stream can
+      // leave an empty assistant block in the SDK's internal transcript,
+      // which 400s every subsequent request. A fresh session replays the
+      // conversation from our store, so nothing is lost.
+      resetChat();
       send({ type: 'chat:error', message: errorMessage(err) });
     } finally {
       chatBusy = false;

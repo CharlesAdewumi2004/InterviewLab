@@ -150,6 +150,9 @@ export class ChatSession {
   send(text: string, onDelta?: (delta: string) => void): Promise<{ text: string; usage: UsageEntry }> {
     if (this.dead) return Promise.reject(new Error('Chat session is not alive.'));
     if (this.pending) return Promise.reject(new Error('Still responding to the previous message.'));
+    // An empty message would put an empty text block in the transcript and
+    // the API rejects those (400) — refuse it here instead.
+    if (!text.trim()) return Promise.reject(new Error('Cannot send an empty message.'));
     this.turns += 1;
     return new Promise((resolve, reject) => {
       this.pending = { onDelta, resolve, reject, text: '' };
