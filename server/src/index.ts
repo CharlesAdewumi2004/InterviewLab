@@ -23,11 +23,12 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-// The client never sees the hidden brief, tests or harness (§15) — strip in
-// one place for intake and session-resume alike.
+// The client never sees the hidden brief, tests, harness — or the constraints
+// and examples: those are the interviewer's private ground truth, and the
+// candidate is expected to extract them by asking. Strip in one place for
+// intake and session-resume alike.
 function toClientProblem(p: ServerProblem): ClientProblem {
-  const { brief: _brief, tests: _tests, harness: _harness, ...clientProblem } = p;
-  return clientProblem;
+  return { title: p.title, statement: p.statement, signature: p.signature };
 }
 
 // Sessions survive disconnects: on close the store is parked here and a
@@ -212,7 +213,15 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
       const micOnMs = s.narrationSpans.reduce((sum, sp) => sum + ((sp.to ?? now) - sp.from), 0);
       const payload = {
         problem: s.problem
-          ? { title: s.problem.title, statement: s.problem.statement, brief: s.problem.brief }
+          ? {
+              title: s.problem.title,
+              statement: s.problem.statement,
+              // The candidate saw ONLY the statement; these were the
+              // interviewer's private facts — clarification scoring should
+              // weigh what was actually there to discover.
+              hiddenConstraints: s.problem.constraints,
+              brief: s.problem.brief,
+            }
           : null,
         transcript: s.turns.map((t) => ({
           at: minutesIn(t.at),

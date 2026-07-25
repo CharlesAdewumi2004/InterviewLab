@@ -2,6 +2,7 @@ import type {
   BuildResult,
   ClientProblem,
   Cursor,
+  Example,
   Persona,
   Scorecard,
   Selection,
@@ -14,9 +15,13 @@ export interface TestCase {
   expected: string;
 }
 
-// Full problem, server-side only. `brief` is never sent to the client;
-// `tests` and `harness` feed the runner.
+// Full problem, server-side only. `constraints` and `examples` are the
+// interviewer's private ground truth — revealed one fact at a time when the
+// candidate asks (never shown in the problem pane); `brief` is never sent to
+// the client; `tests` and `harness` feed the runner.
 export interface ServerProblem extends ClientProblem {
+  constraints: string[];
+  examples: Example[];
   brief: string;
   tests: TestCase[];
   harness: string;

@@ -73,27 +73,10 @@ export default memo(function ProblemPane({ problem, loading, error, onIntake }: 
         </button>
       </div>
       <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-300">{problem.statement}</p>
-      {problem.constraints.length > 0 && (
-        <div>
-          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Constraints</h3>
-          <ul className="space-y-0.5 text-sm text-neutral-400">
-            {problem.constraints.map((c, i) => (
-              <li key={i} className="font-mono text-xs">
-                {c}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {problem.examples.map((ex, i) => (
-        <div key={i} className="rounded bg-neutral-900 p-2">
-          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Example {i + 1}</h3>
-          <pre className="whitespace-pre-wrap font-mono text-xs text-neutral-300">
-            {`Input:  ${ex.input}\nOutput: ${ex.output}`}
-            {ex.note ? `\n${ex.note}` : ''}
-          </pre>
-        </div>
-      ))}
+      <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
+        That's all you get — like a real interview. Constraints, sizes, edge cases and examples exist, but the
+        interviewer only reveals what you ask for.
+      </p>
     </div>
   );
 });

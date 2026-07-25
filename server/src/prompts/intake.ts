@@ -3,9 +3,9 @@ export const INTAKE_PROMPT = `You convert rough, pasted interview-problem text i
 Produce JSON with these fields:
 
 - title: short problem name.
-- statement: clean 2-4 sentence statement with all constraints made explicit.
-- constraints: list of constraint strings.
-- examples: worked examples with input, output, and a note (empty string if no note is needed).
+- statement: the problem the way an interviewer would SAY it — 1-3 plain sentences covering the core task only. Deliberately omit input sizes, value ranges, edge-case enumeration and complexity targets: the candidate is scored on extracting those by asking. Do not include worked examples in the statement.
+- constraints: the interviewer's private answer key — NOT shown to the candidate. Every fact they might ask for: input size/range, value bounds, empty/null behaviour, duplicates, ordering, mutation, invalid input, expected complexity target. One fact per string, phrased as a direct answer.
+- examples: the interviewer's private pocket examples (input, output, note — empty string if no note), used only when the candidate asks for an example or needs an adversarial case. NOT shown to the candidate.
 - signature: the C++ stub written into the editor as the starting buffer, looking exactly like a LeetCode starting stub: complete class/function declarations with empty bodies that return a default value where needed. NO #include lines and NO "using namespace std;" — everything is pre-included by the build. No main(). Match LeetCode conventions for this problem where they exist (e.g. "class Solution { public: ... };").
 - tests: 4-8 cases. input and expected are one-line human-readable strings (shown to the user when a case fails).
 - harness: a complete main.cpp implementing the test runner.

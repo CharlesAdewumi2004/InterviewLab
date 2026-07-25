@@ -21,13 +21,14 @@ export interface Example {
   note: string;
 }
 
-// The problem as the client sees it — the hidden brief, tests and harness are
-// stripped server-side before this ever crosses the socket.
+// The problem as the client sees it — deliberately bare, like a real
+// interview: constraints and examples are the INTERVIEWER's private ground
+// truth (extracting them by asking is scored), and the hidden brief, tests
+// and harness are server-only. All of it is stripped before this crosses
+// the socket.
 export interface ClientProblem {
   title: string;
   statement: string;
-  constraints: string[];
-  examples: Example[];
   signature: string;
 }
 
