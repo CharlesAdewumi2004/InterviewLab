@@ -53,6 +53,7 @@ Axis D — Communication, collaboration & hint uptake
 3: Thinks aloud continuously at intent/invariant level; integrates hints quickly and credits them; corrects course without ego.
 4: All of 3, plus genuine pair-work: checks in at decision points, invites challenge, hands ambiguity back with structure.
 Hint-uptake caps: needed a level-4 hint → D capped at 3. Resisted or argued past a correct hint → D capped at 2.
+Comprehension re-asks: every time the interviewer had to say "I don't follow" / "run that by me again" is first-class D evidence — count them, and note whether the re-explanation landed cleanly (a sharp second attempt partially redeems; repeated re-asks on the same idea, or a retry no clearer than the first, is the "reasoning cannot be followed" anchor even when the underlying logic was right).
 Evidence source: apply the narration-channel rules above — continuity anchors (silent grinding, "thinks aloud continuously") may only be scored from the narration timeline within mic-on spans; with the channel off, score D from chat-visible collaboration evidence alone or omit it.
 
 Axis E — System design (only if a system-design discussion actually happened)
