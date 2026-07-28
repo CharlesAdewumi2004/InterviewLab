@@ -26,7 +26,9 @@ repository.
   trendlines, hint dependency, clarification hit rate, pace (session time and time-to-green)
   and the readiness bar across sessions — filterable by time window (7/30/90 days), with
   per-row delete for scrapping botched or test grades (the db is plain SQLite if you ever
-  want to edit it directly with any SQLite tool).
+  want to edit it directly with any SQLite tool). A **Today's recap** button synthesizes an
+  end-of-day review across every session practised that day: what went well, what needs work
+  (recurring weaknesses flagged per §7), and concrete drills for tomorrow.
 
 ## Quick start with Docker (everything included)
 
@@ -64,7 +66,9 @@ reaches the frontend.
 ## Usage
 
 1. Paste a rough problem into the left pane and hit **Format problem** — the stub lands in the
-   editor.
+   editor. Choose **Written** (statement shown in the pane) or **Oral only** (phone-screen
+   style: the interviewer states the problem in chat/voice, nothing is written down, and asking
+   for repeats is part of the exercise).
 2. Write code — in **C++ or Python** (toolbar toggle; the problem generator produces stubs,
    tests and harnesses in whichever is active). **Ctrl/Cmd+Enter** runs; **Ctrl/Cmd+K** focuses
    the chat. **Ctrl+Space / F8** drives the chat mic: hold to talk (release sends) or tap to

@@ -13,6 +13,7 @@ import { assembleTurn, buildSystemPrompt } from './context.js';
 import { ChatSession, maybeCompact, structuredCall } from './claude.js';
 import { ClangdSession } from './clangd.js';
 import { deleteGrade, listGrades, recordGrade } from './gradebook.js';
+import { dailyRecap } from './recap.js';
 import { compileAndRun } from './runner.js';
 import { intakePrompt, INTAKE_SCHEMA } from './prompts/intake.js';
 import { SCORECARD_PROMPT, SCORECARD_SCHEMA } from './prompts/scorecard.js';
@@ -52,7 +53,10 @@ function errorMessage(err: unknown): string {
 // candidate is expected to extract them by asking. Strip in one place for
 // intake and session-resume alike.
 function toClientProblem(p: ServerProblem): ClientProblem {
-  return { title: p.title, statement: p.statement, signature: p.signature };
+  // Oral delivery hides even the title — a LeetCode problem name is a solution
+  // giveaway, and on a real phone screen you only get what you heard.
+  if (p.oral) return { title: 'Problem (delivered orally)', statement: '', signature: p.signature, oral: true };
+  return { title: p.title, statement: p.statement, signature: p.signature, oral: false };
 }
 
 // Sessions survive disconnects: on close the store is parked here and a
@@ -205,13 +209,50 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         userContent: msg.raw,
         schema: INTAKE_SCHEMA as unknown as Record<string, unknown>,
       });
-      st.setProblem(data);
+      const problem: ServerProblem = { ...data, oral: msg.delivery === 'oral' };
+      st.setProblem(problem);
       st.recordUsage(usage);
       st.save();
       resetChat(); // system prompt now carries the problem + hidden brief
-      send({ type: 'problem:ready', problem: toClientProblem(data), buffer: data.signature });
+      send({ type: 'problem:ready', problem: toClientProblem(problem), buffer: problem.signature });
+      // Phone-screen style: the interviewer states the problem out loud —
+      // the pane shows nothing, listening is part of the exercise.
+      if (problem.oral) await announceProblemOrally(msg.voice === true);
     } catch (err) {
       send({ type: 'problem:error', message: errorMessage(err) });
+    }
+  }
+
+  // Server-initiated interviewer turn that delivers the problem verbally.
+  // Mirrors handleChat's streaming/error handling, but the instruction that
+  // triggers it is never recorded as a candidate turn.
+  async function announceProblemOrally(voice: boolean): Promise<void> {
+    if (chatBusy) return;
+    chatBusy = true;
+    const st = store;
+    try {
+      if (!chat.alive) resetChat();
+      const fresh = chat.isNew();
+      const instruction =
+        'INSTRUCTION (not a message from the candidate — do not acknowledge it): the problem pane is hidden. Deliver the problem to the candidate now, out loud, the way a phone-screen interviewer would: conversational, one or two sentences covering the core task only, no constraints, no examples, no title. Then stop and wait.';
+      const turnText = assembleTurn(st.session, instruction, null, {
+        voice,
+        includeHistory: fresh,
+        includeBuffer: fresh,
+        narration: st.takePendingNarration(),
+      });
+      const { text, usage } = await chat.send(turnText, (t) => send({ type: 'chat:delta', text: t }));
+      if (!text.trim()) throw new Error('The interviewer failed to state the problem — say "please give me the problem".');
+      const turn: Turn = { role: 'assistant', content: text, at: Date.now(), persona: st.session.persona };
+      st.addTurn(turn);
+      st.recordUsage(usage);
+      st.save();
+      send({ type: 'chat:done', turn });
+    } catch (err) {
+      resetChat();
+      send({ type: 'chat:error', message: errorMessage(err) });
+    } finally {
+      chatBusy = false;
     }
   }
 
@@ -418,6 +459,26 @@ fastify.delete('/api/progress/:sessionId', async (request, reply) => {
   const deleted = deleteGrade(sessionId);
   if (!deleted) reply.code(404);
   return { deleted };
+});
+// End-of-day recap across every session practised that day (heavy model
+// call; cached per day until the session set changes). POST because it
+// spends a model call — never triggered by a stray prefetch.
+fastify.post('/api/recap', async (request, reply) => {
+  const body = (request.body ?? {}) as { date?: string };
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date ?? '')
+    ? (body.date as string)
+    : new Date().toLocaleDateString('sv-SE'); // local YYYY-MM-DD
+  try {
+    const result = await dailyRecap(date);
+    if ('error' in result) {
+      reply.code(404);
+      return result;
+    }
+    return { date, ...result };
+  } catch (err) {
+    reply.code(500);
+    return { error: errorMessage(err) };
+  }
 });
 
 await fastify.listen({ port: PORT, host: HOST });

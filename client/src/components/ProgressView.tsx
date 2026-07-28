@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { GradeRecord } from '../../../shared/protocol';
+import type { DailyRecap, GradeRecord } from '../../../shared/protocol';
 
 // Dark-surface viz tokens (series color validated ≥3:1 on #171717).
 const ACCENT = '#3987e5';
@@ -186,6 +186,31 @@ export default function ProgressView({ onClose }: Props) {
   const [grades, setGrades] = useState<GradeRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>('all');
+  const [recap, setRecap] = useState<{ date: string; sessions: number; recap: DailyRecap } | null>(null);
+  const [recapBusy, setRecapBusy] = useState(false);
+  const [recapError, setRecapError] = useState<string | null>(null);
+
+  // Today's recap: synthesized by the heavy model across every session
+  // practised today (server caches it until the session set changes).
+  const handleRecap = async () => {
+    if (recapBusy) return;
+    setRecapBusy(true);
+    setRecapError(null);
+    try {
+      const r = await fetch('/api/recap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = (await r.json()) as { error?: string; date: string; sessions: number; recap: DailyRecap };
+      if (!r.ok || data.error) throw new Error(data.error ?? `HTTP ${r.status}`);
+      setRecap(data);
+    } catch (err) {
+      setRecapError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRecapBusy(false);
+    }
+  };
 
   useEffect(() => {
     fetch('/api/progress')
@@ -302,10 +327,79 @@ export default function ProgressView({ onClose }: Props) {
               ))}
             </div>
           </div>
-          <button onClick={onClose} className="rounded bg-neutral-800 px-3 py-1 text-sm hover:bg-neutral-700">
-            Close
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void handleRecap()}
+              disabled={recapBusy}
+              title="End-of-day feedback across every session practised today: what went well, what needs work, drills for tomorrow"
+              className="rounded border border-blue-800 bg-blue-950/60 px-3 py-1 text-sm text-blue-200 hover:bg-blue-900/60 disabled:opacity-40"
+            >
+              {recapBusy ? 'Recapping…' : "Today's recap"}
+            </button>
+            <button onClick={onClose} className="rounded bg-neutral-800 px-3 py-1 text-sm hover:bg-neutral-700">
+              Close
+            </button>
+          </div>
         </div>
+
+        {recapError && (
+          <div className="mb-3 rounded bg-amber-900/40 px-3 py-2 text-sm text-amber-300">Recap: {recapError}</div>
+        )}
+        {recap && (
+          <section className="mb-5 rounded border border-blue-900 bg-blue-950/20 p-4">
+            <div className="mb-2 flex items-baseline justify-between">
+              <h3 className="text-sm font-semibold text-blue-200">
+                Daily recap — {recap.date} · {recap.sessions} session{recap.sessions === 1 ? '' : 's'}
+              </h3>
+              <button onClick={() => setRecap(null)} className="text-xs text-neutral-500 hover:text-neutral-300">
+                dismiss
+              </button>
+            </div>
+            <p className="mb-3 text-sm font-medium leading-relaxed text-neutral-100">{recap.recap.headline}</p>
+            <div className="mb-3 grid grid-cols-2 gap-4">
+              <div>
+                <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-green-500">Went well</h4>
+                <ul className="space-y-1.5 text-sm text-neutral-300">
+                  {recap.recap.went_well.map((w, i) => (
+                    <li key={i}>
+                      {w.point}
+                      <span className="block text-xs text-neutral-500">{w.evidence}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-orange-400">Needs work</h4>
+                <ul className="space-y-1.5 text-sm text-neutral-300">
+                  {recap.recap.needs_work.map((w, i) => (
+                    <li key={i}>
+                      {w.point}
+                      {w.recurring && (
+                        <span className="ml-1.5 rounded bg-orange-900/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-orange-300">
+                          recurring
+                        </span>
+                      )}
+                      <span className="block text-xs text-neutral-500">{w.evidence}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <p className="mb-3 text-xs text-neutral-400">{recap.recap.metrics_note}</p>
+            <div className="mb-3 rounded border border-red-900 bg-red-950/30 p-2.5">
+              <span className="text-xs font-semibold uppercase tracking-wide text-red-400">Top priority: </span>
+              <span className="text-sm text-neutral-200">{recap.recap.top_priority}</span>
+            </div>
+            <div>
+              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-400">Drills for tomorrow</h4>
+              <ul className="list-inside list-decimal space-y-1 text-sm text-neutral-300">
+                {recap.recap.drills.map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        )}
 
         {error && <div className="mb-3 rounded bg-red-900/40 px-3 py-2 text-sm text-red-300">{error}</div>}
         {!error && grades === null && <p className="text-sm text-neutral-500">Loading…</p>}

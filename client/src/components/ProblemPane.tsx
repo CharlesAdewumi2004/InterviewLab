@@ -5,12 +5,13 @@ interface Props {
   problem: ClientProblem | null;
   loading: boolean;
   error: string | null;
-  onIntake: (raw: string) => void;
+  onIntake: (raw: string, delivery: 'text' | 'oral') => void;
 }
 
 // Memoized: props only change on intake events, not per streamed chat token.
 export default memo(function ProblemPane({ problem, loading, error, onIntake }: Props) {
   const [raw, setRaw] = useState('');
+  const [delivery, setDelivery] = useState<'text' | 'oral'>('text');
   const [showIntake, setShowIntake] = useState(false);
 
   // When a (re-)intake succeeds, snap back to the problem view — staying on
@@ -37,9 +38,33 @@ export default memo(function ProblemPane({ problem, loading, error, onIntake }: 
           className="min-h-0 flex-1 resize-none rounded border border-neutral-700 bg-neutral-900 p-2 text-sm outline-none focus:border-blue-600"
         />
         {error && <div className="rounded bg-red-900/40 px-2 py-1 text-xs text-red-300">{error}</div>}
+        <div className="flex overflow-hidden rounded border border-neutral-700 text-xs">
+          <button
+            onClick={() => setDelivery('text')}
+            title="The problem statement appears here as text"
+            className={
+              delivery === 'text'
+                ? 'flex-1 bg-blue-700 px-2 py-1 font-medium text-white'
+                : 'flex-1 bg-neutral-900 px-2 py-1 text-neutral-400 hover:bg-neutral-800'
+            }
+          >
+            Written
+          </button>
+          <button
+            onClick={() => setDelivery('oral')}
+            title="Phone-screen style: the interviewer states the problem in chat/voice — nothing appears here. Listen, take notes, ask for repeats."
+            className={
+              delivery === 'oral'
+                ? 'flex-1 bg-blue-700 px-2 py-1 font-medium text-white'
+                : 'flex-1 bg-neutral-900 px-2 py-1 text-neutral-400 hover:bg-neutral-800'
+            }
+          >
+            Oral only
+          </button>
+        </div>
         <div className="flex gap-2">
           <button
-            onClick={() => raw.trim() && onIntake(raw.trim())}
+            onClick={() => raw.trim() && onIntake(raw.trim(), delivery)}
             disabled={loading || !raw.trim()}
             className="rounded bg-blue-700 px-3 py-1.5 text-sm font-medium hover:bg-blue-600 disabled:opacity-40"
           >
@@ -72,11 +97,20 @@ export default memo(function ProblemPane({ problem, loading, error, onIntake }: 
           New problem
         </button>
       </div>
-      <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-300">{problem.statement}</p>
-      <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
-        That's all you get — like a real interview. Constraints, sizes, edge cases and examples exist, but the
-        interviewer only reveals what you ask for.
-      </p>
+      {problem.oral ? (
+        <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
+          🎧 The interviewer stated this problem in the chat — there's no written version. Ask them to repeat
+          anything you missed (that's normal phone-screen behaviour), and keep your own notes.
+        </p>
+      ) : (
+        <>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-300">{problem.statement}</p>
+          <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
+            That's all you get — like a real interview. Constraints, sizes, edge cases and examples exist, but the
+            interviewer only reveals what you ask for.
+          </p>
+        </>
+      )}
     </div>
   );
 });

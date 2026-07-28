@@ -32,6 +32,10 @@ export interface ClientProblem {
   title: string;
   statement: string;
   signature: string;
+  // Oral delivery (phone-screen style): the interviewer STATED the problem in
+  // chat/voice instead — title and statement arrive blanked, and listening +
+  // asking for repeats is part of the exercise.
+  oral: boolean;
 }
 
 export interface BuildResult {
@@ -146,8 +150,22 @@ export interface GradeRecord extends GradeSummary {
   axes: ScorecardAxis[];
 }
 
+// End-of-day recap across every session practised that day, produced by the
+// heavy model from the day's scorecards + telemetry (POST /api/recap).
+export interface DailyRecap {
+  headline: string; // 1-2 sentence verdict on the day
+  went_well: { point: string; evidence: string }[];
+  needs_work: { point: string; evidence: string; recurring: boolean }[];
+  metrics_note: string; // hint dependency, clarification rate, pace across the day
+  top_priority: string; // the single thing to fix first
+  drills: string[]; // concrete exercises for tomorrow
+}
+
 export type ClientMessage =
-  | { type: 'problem:intake'; raw: string }
+  // delivery 'oral' = the interviewer speaks the problem (pane text hidden);
+  // 'text' (default) = statement shown in the pane as well. `voice` mirrors
+  // chat:send: when on, the oral statement is styled for text-to-speech.
+  | { type: 'problem:intake'; raw: string; delivery?: 'text' | 'oral'; voice?: boolean }
   | { type: 'editor:state'; buffer: string; selection: Selection | null; cursor: Cursor }
   // chat:send and run carry the buffer so the backend never acts on a stale
   // debounced copy — the payload is authoritative at that instant.

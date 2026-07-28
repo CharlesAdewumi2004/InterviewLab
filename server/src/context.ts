@@ -60,8 +60,14 @@ export function buildSystemPrompt(session: Session): string {
       )
       .join('\n');
     const facts = `Constraints:\n${p.constraints.map((c) => `- ${c}`).join('\n')}\n\n${examples}`;
-    // The candidate sees ONLY the bare statement in their problem pane.
+    // The candidate sees ONLY the bare statement in their problem pane —
+    // or nothing at all when delivery is oral.
     blocks.push(`# Problem: ${p.title}\n\n${p.statement}`);
+    if (p.oral) {
+      blocks.push(
+        'ORAL DELIVERY: the candidate CANNOT see the problem text or title — you stated the problem aloud. Asking you to repeat or re-state part of it is normal phone-screen behaviour, not a weakness; when asked, repeat only what they asked for, in the same conversational register. Never paste the written statement.',
+      );
+    }
     if (session.persona === 'tutor') {
       // The tutor is transparent — full problem facts, no gatekeeping.
       blocks.push(facts);

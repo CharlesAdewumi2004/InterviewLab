@@ -37,7 +37,7 @@ export interface EditSummary {
 
 export interface UsageEntry {
   at: number;
-  purpose: 'chat' | 'intake' | 'debrief' | 'compact';
+  purpose: 'chat' | 'intake' | 'debrief' | 'compact' | 'recap';
   model: string;
   inputTokens: number;
   outputTokens: number;

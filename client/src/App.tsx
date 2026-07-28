@@ -126,6 +126,10 @@ export default function App() {
         setBuild(null);
         setTests(null);
         editorApiRef.current?.setValue(msg.buffer);
+        // Oral delivery: the interviewer's spoken statement streams next —
+        // prime the speaker so voice mode reads it aloud (and clear any
+        // earlier barge-in stop).
+        if (msg.problem.oral && voiceModeRef.current) speakerRef.current.beginReply();
         break;
       case 'problem:error':
         setIntakeLoading(false);
@@ -330,8 +334,8 @@ export default function App() {
   );
 
   const handleIntake = useCallback(
-    (raw: string) => {
-      if (!send({ type: 'problem:intake', raw })) {
+    (raw: string, delivery: 'text' | 'oral') => {
+      if (!send({ type: 'problem:intake', raw, delivery, voice: voiceModeRef.current })) {
         setIntakeError('Not connected — reconnecting. Try again in a moment.');
         return;
       }
