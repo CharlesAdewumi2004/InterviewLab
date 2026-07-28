@@ -4,6 +4,8 @@
 // dedicated round types (each grades into its own §3 mode via axes E/F).
 export type Persona = 'interviewer' | 'sysdesign' | 'behavioral' | 'tutor' | 'bloomberg';
 
+export type Language = 'cpp' | 'python';
+
 export interface Selection {
   startLine: number;
   endLine: number;
@@ -154,6 +156,10 @@ export type ClientMessage =
   | { type: 'chat:send'; content: string; buffer: string; selection: Selection | null; cursor: Cursor; voice?: boolean }
   | { type: 'run'; buffer: string }
   | { type: 'persona:set'; persona: Persona }
+  // Switch working language. The server answers with a fresh session:ready
+  // snapshot (buffer may swap if it was still the untouched default) and the
+  // problem generator produces stubs/harnesses in this language from then on.
+  | { type: 'language:set'; language: Language }
   // Ambient narration channel: think-aloud spoken while coding, transcribed
   // continuously. Segments are context + Axis D evidence, never chat turns —
   // the interviewer does not reply to them. `narration:state` marks when the
@@ -180,6 +186,7 @@ export type ServerMessage =
       type: 'session:ready';
       sessionId: string;
       persona: Persona;
+      language: Language;
       resumed: boolean;
       startedAt: number;
       problem: ClientProblem | null;

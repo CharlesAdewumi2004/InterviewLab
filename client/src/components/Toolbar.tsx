@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from 'react';
-import type { Persona } from '../../../shared/protocol';
+import type { Language, Persona } from '../../../shared/protocol';
 import {
   getPreferredVoiceName,
   listEnglishVoices,
@@ -11,6 +11,7 @@ import {
 
 interface Props {
   persona: Persona;
+  language: Language;
   compiling: boolean;
   connected: boolean;
   startedAt: number;
@@ -25,6 +26,7 @@ interface Props {
   /** False while capture has yielded the mic (TTS speaking, push-to-talk). */
   narrationActive: boolean;
   onPersona: (p: Persona) => void;
+  onLanguage: (l: Language) => void;
   onRun: () => void;
   onEndSession: () => void;
   onResetSession: () => void;
@@ -195,6 +197,15 @@ export default memo(function Toolbar(props: Props) {
         {props.voiceMode ? 'Voice on' : 'Voice'}
       </button>
       {props.voiceMode && <VoicePicker />}
+
+      <Segmented
+        value={props.language}
+        options={[
+          { value: 'cpp', label: 'C++' },
+          { value: 'python', label: 'Py' },
+        ]}
+        onChange={props.onLanguage}
+      />
 
       <Segmented
         value={props.persona}

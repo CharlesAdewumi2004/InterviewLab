@@ -45,6 +45,12 @@ export function buildSystemPrompt(session: Session): string {
   }[session.persona];
   blocks.push(personaPrompt);
 
+  if (session.language === 'python') {
+    blocks.push(
+      'NOTE: this session is in PYTHON, not C++. Judge idiomatic Python (comprehensions, generators, dict/set fluency, standard-library reach) at the same bar — any C++-specific calibration in your instructions maps to its Python equivalent.',
+    );
+  }
+
   const p = session.problem;
   if (p) {
     const examples = p.examples
@@ -96,7 +102,7 @@ function buildLiveState(
 
   if (includeBuffer) {
     parts.push(
-      `=== CURRENT BUFFER (C++, line-numbered — supersedes every earlier buffer in this conversation) ===\n${numberLines(session.buffer)}`,
+      `=== CURRENT BUFFER (${session.language === 'python' ? 'Python' : 'C++'}, line-numbered — supersedes every earlier buffer in this conversation) ===\n${numberLines(session.buffer)}`,
     );
   } else {
     parts.push('=== BUFFER === unchanged since the last message');

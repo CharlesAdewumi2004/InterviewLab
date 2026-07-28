@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import type { BuildResult, Cursor, Persona, Selection, TestsResult, Turn } from '../../shared/protocol';
+import type { BuildResult, Cursor, Language, Persona, Selection, TestsResult, Turn } from '../../shared/protocol';
 import type { EditSummary, NarrationSegment, ServerProblem, Session, UsageEntry } from './types.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -24,9 +24,10 @@ export function activeMs(session: Session, at: number): number {
   return Math.max(0, at - session.startedAt - pausedMsUntil(session, at));
 }
 
-// LeetCode semantics: the build force-includes <bits/stdc++.h> and
+// LeetCode semantics: the C++ build force-includes <bits/stdc++.h> and
 // `using namespace std;` — buffers need no boilerplate.
-const DEFAULT_BUFFER = `// All standard headers are pre-included and \`using namespace std\` is on
+const DEFAULT_BUFFERS: Record<Language, string> = {
+  cpp: `// All standard headers are pre-included and \`using namespace std\` is on
 // (LeetCode-style) — no #includes needed.
 // Paste a rough problem into the left pane to generate a stub and tests,
 // or just write code here and hit Ctrl/Cmd+Enter to compile and run.
@@ -35,7 +36,13 @@ int main() {
     cout << "hello" << endl;
     return 0;
 }
-`;
+`,
+  python: `# Paste a rough problem into the left pane to generate a stub and tests,
+# or just write code here and hit Ctrl/Cmd+Enter to run.
+
+print("hello")
+`,
+};
 
 export class SessionStore {
   session: Session;
@@ -51,7 +58,7 @@ export class SessionStore {
       startedAt: now,
       persona: 'interviewer',
       problem: null,
-      buffer: DEFAULT_BUFFER,
+      buffer: DEFAULT_BUFFERS.cpp,
       language: 'cpp',
       selection: null,
       cursor: { line: 1, column: 1 },
@@ -85,6 +92,18 @@ export class SessionStore {
 
   setPersona(persona: Persona): void {
     this.session.persona = persona;
+  }
+
+  // Switch working language. If the buffer is still an untouched default,
+  // swap it for the new language's default so the editor isn't left showing
+  // the wrong syntax; real work is never overwritten.
+  setLanguage(language: Language): void {
+    const pristine = Object.values(DEFAULT_BUFFERS).includes(this.session.buffer);
+    this.session.language = language;
+    if (pristine) {
+      this.session.buffer = DEFAULT_BUFFERS[language];
+      this.lastTurnBuffer = this.session.buffer;
+    }
   }
 
   setProblem(problem: ServerProblem): void {

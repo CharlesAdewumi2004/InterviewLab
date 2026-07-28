@@ -1,5 +1,10 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { IncomingMessage } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { ClientMessage, ClientProblem, Scorecard, ServerMessage, Turn } from '../../shared/protocol';
@@ -9,15 +14,34 @@ import { ChatSession, maybeCompact, structuredCall } from './claude.js';
 import { ClangdSession } from './clangd.js';
 import { deleteGrade, listGrades, recordGrade } from './gradebook.js';
 import { compileAndRun } from './runner.js';
-import { INTAKE_PROMPT, INTAKE_SCHEMA } from './prompts/intake.js';
+import { intakePrompt, INTAKE_SCHEMA } from './prompts/intake.js';
 import { SCORECARD_PROMPT, SCORECARD_SCHEMA } from './prompts/scorecard.js';
 import type { ServerProblem } from './types.js';
 
 const PORT = Number(process.env.PORT || 3001);
+// 127.0.0.1 for local dev; Docker sets HOST=0.0.0.0 so the published port works.
+const HOST = process.env.HOST || '127.0.0.1';
 
-// Model calls run through the Claude Agent SDK using this machine's Claude
-// Code login (Pro/Max subscription) — no API key involved. See claude.ts.
-console.log('Model access: Claude Agent SDK via your Claude Code login (if calls fail with auth errors, run `claude` then `/login`).');
+// Model calls run through the Claude Agent SDK on the user's own Claude
+// subscription — no API key involved. See claude.ts. Two ways to link an
+// account, checked here so a fresh setup gets clear instructions at boot.
+if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+  console.log('Model access: Claude subscription via CLAUDE_CODE_OAUTH_TOKEN.');
+} else if (fs.existsSync(path.join(os.homedir(), '.claude'))) {
+  console.log('Model access: Claude Code login found on this machine (run `claude` then `/login` if calls fail with auth errors).');
+} else {
+  console.warn(
+    [
+      '',
+      '⚠ No Claude account linked yet — model calls will fail until you do ONE of:',
+      '  1. Run `claude` then `/login` on this machine (Claude Pro/Max subscription), or',
+      '  2. Run `claude setup-token` (on any machine — or `docker compose run --rm auth`),',
+      '     then put the token in .env as CLAUDE_CODE_OAUTH_TOKEN=...',
+      'Your account, your usage — nothing is stored in this repository.',
+      '',
+    ].join('\n'),
+  );
+}
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -74,6 +98,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
       type: 'session:ready',
       sessionId: s.id,
       persona: s.persona,
+      language: s.language,
       resumed: asResumed,
       startedAt: s.startedAt,
       problem: s.problem ? toClientProblem(s.problem) : null,
@@ -176,7 +201,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
     try {
       const { data, usage } = await structuredCall<ServerProblem>({
         purpose: 'intake',
-        system: INTAKE_PROMPT,
+        system: intakePrompt(st.session.language),
         userContent: msg.raw,
         schema: INTAKE_SCHEMA as unknown as Record<string, unknown>,
       });
@@ -311,6 +336,14 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         store.save();
         resetChat(); // system prompt now carries the new persona
         break;
+      case 'language:set':
+        store.setLanguage(msg.language);
+        store.save();
+        resetChat(); // the persona is told which language the candidate works in
+        // Full snapshot back: the buffer may have swapped to the new
+        // language's default, and the editor needs its syntax mode updated.
+        announceSession(false);
+        break;
       case 'narration:segment':
         // Context + grading evidence only — never triggers a model call.
         store.addNarration(msg.text);
@@ -366,6 +399,15 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
 }
 
 const fastify = Fastify({ logger: false });
+
+// Production/Docker: serve the built client from the same port (no Vite). In
+// dev the Vite server proxies here instead, and this simply doesn't register.
+const CLIENT_DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../client/dist');
+if (process.env.SERVE_CLIENT !== '0' && fs.existsSync(path.join(CLIENT_DIST, 'index.html'))) {
+  await fastify.register(fastifyStatic, { root: CLIENT_DIST });
+  console.log('Serving built client from client/dist on the same port.');
+}
+
 fastify.get('/health', async () => ({ ok: true }));
 // Gradebook, oldest-first — powers the Progress view.
 fastify.get('/api/progress', async () => ({ grades: listGrades() }));
@@ -378,7 +420,7 @@ fastify.delete('/api/progress/:sessionId', async (request, reply) => {
   return { deleted };
 });
 
-await fastify.listen({ port: PORT, host: '127.0.0.1' });
+await fastify.listen({ port: PORT, host: HOST });
 const wss = new WebSocketServer({ server: fastify.server, path: '/ws' });
 wss.on('connection', handleConnection);
-console.log(`practice-ide server listening on http://127.0.0.1:${PORT} (ws at /ws)`);
+console.log(`practice-ide server listening on http://${HOST}:${PORT} (ws at /ws)`);

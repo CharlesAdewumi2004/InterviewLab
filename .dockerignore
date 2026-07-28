@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+.git
+.env
+sessions/*.json
+sessions/gradebook.db
+interview-data
+client/dist
+.claude
+*.log
+Dockerfile
+docker-compose.yml

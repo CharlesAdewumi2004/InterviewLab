@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { BuildResult, TestFailure, TestsResult } from '../../shared/protocol';
 import type { Session } from './types.js';
-import { BASH, CPP_PRELUDE, CXX, PRELUDE_FILE, toolchainEnv } from './toolchain.js';
+import { BASH, CPP_PRELUDE, CXX, PRELUDE_FILE, PYTHON, toolchainEnv } from './toolchain.js';
 
 const COMPILE_TIMEOUT_MS = 10_000;
 const EXEC_TIMEOUT_MS = 5_000;
@@ -13,28 +13,34 @@ const EXEC_TIMEOUT_MS = 5_000;
 // execution are both unreliable outside an MSYS2 shell.
 const EXE = process.platform === 'win32' ? 'prog.exe' : 'a.out';
 
-// MSYS2 MinGW gcc ships no libasan/libubsan, so -fsanitize can't link there.
-// Probe once per server process with a trivial compile and adapt. Memoized as
-// a promise so concurrent runs share one probe instead of racing in the same
-// directory.
-let sanitizerProbe: Promise<boolean> | null = null;
+// Toolchains differ: MSYS2 MinGW gcc ships no libasan/libubsan, and older
+// gcc (e.g. Debian bookworm's gcc 12) spells C++23 as -std=c++2b. Probe once
+// per server process with trivial compiles and adapt. Memoized as a promise
+// so concurrent runs share one probe instead of racing in the same directory.
+let cppProbe: Promise<{ stdFlag: string; sanitize: boolean }> | null = null;
 
-function probeSanitizers(): Promise<boolean> {
-  sanitizerProbe ??= (async () => {
-    const probeDir = path.join(os.tmpdir(), 'practice-ide', 'sanitizer-probe');
+function probeCpp(): Promise<{ stdFlag: string; sanitize: boolean }> {
+  cppProbe ??= (async () => {
+    const probeDir = path.join(os.tmpdir(), 'practice-ide', 'toolchain-probe');
     fs.mkdirSync(probeDir, { recursive: true });
     fs.writeFileSync(path.join(probeDir, 'p.cpp'), 'int main(){return 0;}\n');
-    const r = await runProcess(CXX, ['-fsanitize=address,undefined', '-o', EXE, 'p.cpp'], {
-      cwd: probeDir,
-      timeoutMs: COMPILE_TIMEOUT_MS,
-      env: toolchainEnv(),
-    });
-    if (r.code !== 0) {
-      console.warn(`ASan/UBSan unavailable with ${CXX} — compiling without sanitizers.`);
+    const opts = { cwd: probeDir, timeoutMs: COMPILE_TIMEOUT_MS, env: toolchainEnv() };
+
+    let stdFlag = '-std=c++23';
+    for (const flag of ['-std=c++23', '-std=c++2b', '-std=c++20']) {
+      const r = await runProcess(CXX, [flag, '-o', EXE, 'p.cpp'], opts);
+      if (r.code === 0) {
+        stdFlag = flag;
+        break;
+      }
     }
-    return r.code === 0;
+    if (stdFlag !== '-std=c++23') console.warn(`${CXX} doesn't accept -std=c++23 — using ${stdFlag}.`);
+
+    const s = await runProcess(CXX, [stdFlag, '-fsanitize=address,undefined', '-o', EXE, 'p.cpp'], opts);
+    if (s.code !== 0) console.warn(`ASan/UBSan unavailable with ${CXX} — compiling without sanitizers.`);
+    return { stdFlag, sanitize: s.code === 0 };
   })();
-  return sanitizerProbe;
+  return cppProbe;
 }
 
 interface ProcResult {
@@ -167,6 +173,7 @@ export async function compileAndRun(
 ): Promise<{ build: BuildResult; tests: TestsResult | null }> {
   const workDir = path.join(os.tmpdir(), 'practice-ide', session.id);
   fs.mkdirSync(workDir, { recursive: true });
+  if (session.language === 'python') return runPython(session, workDir);
   fs.writeFileSync(path.join(workDir, PRELUDE_FILE), CPP_PRELUDE);
 
   const problem = session.problem;
@@ -183,11 +190,11 @@ export async function compileAndRun(
     fs.writeFileSync(path.join(workDir, 'main.cpp'), session.buffer);
   }
 
-  const sanitize = await probeSanitizers();
+  const { stdFlag, sanitize } = await probeCpp();
   const compile = await runProcess(
     CXX,
     [
-      '-std=c++23',
+      stdFlag,
       '-O2',
       '-Wall',
       '-Wextra',
@@ -260,6 +267,76 @@ export async function compileAndRun(
     };
   }
 
+  return {
+    build: { status: 'ok', stderr: runtimeStderr, stdout: exec.stdout.replace(/\r\n/g, '\n').trim() },
+    tests: null,
+  };
+}
+
+// Python path: the buffer is solution.py, the harness is main.py (importing
+// solution). "Compile" is py_compile — it surfaces syntax errors with real
+// line numbers the same way the C++ build step does — and execution runs
+// unbuffered (-u) so ###CASE markers survive a timeout kill.
+const PY_EXEC_TIMEOUT_MS = 10_000; // interpreter startup + LeetCode-ish python allowance
+
+async function runPython(
+  session: Session,
+  workDir: string,
+): Promise<{ build: BuildResult; tests: TestsResult | null }> {
+  const problem = session.problem;
+  const hasHarness = Boolean(problem && problem.harness && problem.tests.length);
+
+  const sources: string[] = [];
+  if (hasHarness && problem) {
+    fs.writeFileSync(path.join(workDir, 'solution.py'), session.buffer);
+    const harness = problem.harness.includes('from solution import')
+      ? problem.harness
+      : `from solution import *\n${problem.harness}`;
+    fs.writeFileSync(path.join(workDir, 'main.py'), harness);
+    sources.push('solution.py', 'main.py');
+  } else {
+    fs.writeFileSync(path.join(workDir, 'main.py'), session.buffer);
+    sources.push('main.py');
+  }
+
+  const compile = await runProcess(PYTHON, ['-m', 'py_compile', ...sources], {
+    cwd: workDir,
+    timeoutMs: COMPILE_TIMEOUT_MS,
+    env: toolchainEnv(),
+  });
+  if (compile.code === null && /ENOENT/.test(compile.stderr)) {
+    return {
+      build: {
+        status: 'error',
+        stderr: `Python not found (tried: ${PYTHON}). Install Python 3 or set PYTHON in .env to your interpreter's full path.`,
+        stdout: '',
+      },
+      tests: null,
+    };
+  }
+  if (compile.code !== 0) {
+    return { build: { status: 'error', stderr: compile.stderr.trim(), stdout: '' }, tests: null };
+  }
+
+  const exec = await runProcess(PYTHON, ['-u', 'main.py'], {
+    cwd: workDir,
+    timeoutMs: PY_EXEC_TIMEOUT_MS,
+    env: toolchainEnv(),
+  });
+
+  let runtimeStderr = exec.stderr.trim();
+  if (exec.timedOut) {
+    runtimeStderr = [runtimeStderr, `[execution timed out after ${PY_EXEC_TIMEOUT_MS / 1000}s — killed]`]
+      .filter(Boolean)
+      .join('\n');
+  } else if (exec.code !== null && exec.code !== 0) {
+    runtimeStderr = [runtimeStderr, `[process exited with code ${exec.code}]`].filter(Boolean).join('\n');
+  }
+
+  if (hasHarness) {
+    const { tests, programOutput } = parseTestOutput(exec.stdout, session);
+    return { build: { status: 'ok', stderr: runtimeStderr, stdout: programOutput }, tests };
+  }
   return {
     build: { status: 'ok', stderr: runtimeStderr, stdout: exec.stdout.replace(/\r\n/g, '\n').trim() },
     tests: null,

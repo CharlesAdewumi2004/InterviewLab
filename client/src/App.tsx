@@ -4,6 +4,7 @@ import type {
   ClientMessage,
   ClientProblem,
   GradeSummary,
+  Language,
   Persona,
   Scorecard,
   ServerMessage,
@@ -25,6 +26,7 @@ type DebriefState = { scorecard: Scorecard; grade: GradeSummary } | null;
 
 export default function App() {
   const [persona, setPersona] = useState<Persona>('interviewer');
+  const [language, setLanguage] = useState<Language>('cpp');
   const [problem, setProblem] = useState<ClientProblem | null>(null);
   const [intakeLoading, setIntakeLoading] = useState(false);
   const [intakeError, setIntakeError] = useState<string | null>(null);
@@ -88,6 +90,7 @@ export default function App() {
         setStartedAt(msg.startedAt);
         setPauseState({ paused: msg.paused, pausedMs: msg.pausedMs, pausedAt: msg.pausedAt });
         setPersona(msg.persona);
+        setLanguage(msg.language);
         setTurns(msg.turns);
         setProblem(msg.problem);
         setStreamText(null);
@@ -317,6 +320,15 @@ export default function App() {
     [send],
   );
 
+  // The server replies with a fresh session:ready snapshot (possibly with a
+  // swapped default buffer) — client state updates from that round trip.
+  const handleLanguage = useCallback(
+    (l: Language) => {
+      send({ type: 'language:set', language: l });
+    },
+    [send],
+  );
+
   const handleIntake = useCallback(
     (raw: string) => {
       if (!send({ type: 'problem:intake', raw })) {
@@ -372,6 +384,7 @@ export default function App() {
     <div className="flex h-full flex-col">
       <Toolbar
         persona={persona}
+        language={language}
         compiling={compiling}
         connected={connected}
         startedAt={startedAt}
@@ -383,6 +396,7 @@ export default function App() {
         narrationOn={narrationOn}
         narrationActive={narrationActive}
         onPersona={handlePersona}
+        onLanguage={handleLanguage}
         onRun={handleRun}
         onEndSession={handleEndSession}
         onResetSession={handleResetSession}
@@ -400,6 +414,7 @@ export default function App() {
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="min-h-0 flex-[3]">
             <Editor
+              language={language}
               onState={handleEditorState}
               onRun={handleRun}
               onFocusChat={handleFocusChat}

@@ -63,6 +63,15 @@ export const CLANGD = resolveTool('CLANGD', 'clangd', [
   'C:/Program Files/LLVM/bin/clangd.exe',
 ]);
 
+/** Python interpreter. Windows installs name it `python` (or the `py` launcher); POSIX is `python3`. */
+export const PYTHON =
+  process.env.PYTHON ??
+  onPath(WIN ? 'python' : 'python3') ??
+  onPath('python3') ??
+  onPath('python') ??
+  onPath('py') ??
+  (WIN ? 'python' : 'python3');
+
 // Windows env blocks are case-insensitive but node spreads them as plain
 // objects — writing 'PATH' next to an existing 'Path' key would put two PATH
 // entries in the child env. Reuse whatever casing the parent env has.

@@ -1,7 +1,9 @@
 # Practice IDE
 
-A local, single-user C++ coding environment with a conversational AI that can always see the
-current code. Built for interview practice — you never paste code into a chat box.
+A local, single-user coding environment (C++ and Python) with a conversational AI that can
+always see the current code. Built for interview practice — you never paste code into a chat
+box. Runs on **your own Claude Pro/Max subscription** — no API key, and no credentials in this
+repository.
 
 - **LeetCode-style Monaco editor** with C++ config, STL snippets and word-based suggestions.
   True LeetCode build semantics: every standard header is pre-included and `using namespace std`
@@ -26,30 +28,48 @@ current code. Built for interview practice — you never paste code into a chat 
   per-row delete for scrapping botched or test grades (the db is plain SQLite if you ever
   want to edit it directly with any SQLite tool).
 
-## Requirements
+## Quick start with Docker (everything included)
 
-- Node 20+
-- `g++` (or `clang++` — set `CXX=clang++` in `.env`) supporting `-std=c++23` and sanitizers
-- A Claude Pro/Max subscription, logged in via Claude Code on this machine (`claude`, then `/login`)
+The image contains Node, g++ (with sanitizers), Python 3, clangd and the app — the only thing
+you bring is your Claude subscription:
 
-## Setup
+```sh
+docker compose run --rm auth   # one-time: browser login → prints a token
+# paste the token into .env:   CLAUDE_CODE_OAUTH_TOKEN=...
+docker compose up --build      # app on http://localhost:3001
+```
+
+(Already have Claude Code logged in on the host? Skip the token: uncomment the `~/.claude`
+volume mount in `docker-compose.yml` instead.) Sessions and the gradebook persist in
+`./sessions` on the host.
+
+## Running locally without Docker
+
+Requirements: Node 22+, `g++` supporting C++20 or newer (`clang++` via `CXX` in `.env` works
+too), optionally Python 3 for Python practice, optionally `clangd` for semantic completions,
+and a Claude Pro/Max subscription linked ONE of two ways:
+
+- run `claude` then `/login` once on this machine, **or**
+- `claude setup-token` and put the token in `.env` as `CLAUDE_CODE_OAUTH_TOKEN=...`
 
 ```sh
 npm install
 npm run dev            # server on :3001, client on the Vite port it prints
 ```
 
-Open the Vite URL. Model calls run through the Claude Agent SDK using your
-Claude Code subscription login — no API key, and nothing model-related reaches
-the frontend. (`.env` is now only needed for the optional `CXX` override.)
+Open the Vite URL. Model calls run through the Claude Agent SDK on your subscription — usage
+draws from your plan's rate windows, never pay-per-token billing, and nothing model-related
+reaches the frontend.
 
 ## Usage
 
 1. Paste a rough problem into the left pane and hit **Format problem** — the stub lands in the
    editor.
-2. Write code. **Ctrl/Cmd+Enter** runs; **Ctrl/Cmd+K** focuses the chat. **Ctrl+Space / F8**
-   drives the chat mic: hold to talk (release sends) or tap to toggle it on hands-free (tap
-   again to send). The **Narrate** button separately toggles the ambient think-aloud mic.
+2. Write code — in **C++ or Python** (toolbar toggle; the problem generator produces stubs,
+   tests and harnesses in whichever is active). **Ctrl/Cmd+Enter** runs; **Ctrl/Cmd+K** focuses
+   the chat. **Ctrl+Space / F8** drives the chat mic: hold to talk (release sends) or tap to
+   toggle it on hands-free (tap again to send). The **Narrate** button separately toggles the
+   ambient think-aloud mic.
 3. Talk to the interviewer at any time — it sees your buffer, selection, cursor, build errors
    and test results automatically. Flip to **Tutor** when you want direct answers.
 4. Sessions **start paused** — setup time (pasting, reading the problem) never counts as

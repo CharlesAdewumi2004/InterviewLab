@@ -3,6 +3,7 @@ import type {
   ClientProblem,
   Cursor,
   Example,
+  Language,
   Persona,
   Scorecard,
   Selection,
@@ -90,7 +91,7 @@ export interface Session {
   persona: Persona;
   problem: ServerProblem | null;
   buffer: string;
-  language: 'cpp';
+  language: Language;
   selection: Selection | null;
   cursor: Cursor;
   build: BuildState;

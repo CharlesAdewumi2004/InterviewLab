@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef } from 'react';
 import MonacoEditor, { type Monaco, type OnMount } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
-import type { Cursor, Selection } from '../../../shared/protocol';
+import type { Cursor, Language, Selection } from '../../../shared/protocol';
 import { EDITOR_OPTIONS, setupMonaco } from '../lib/monacoConfig';
 
 export interface EditorState {
@@ -29,6 +29,7 @@ int main() {
 `;
 
 interface Props {
+  language: Language;
   onState: (state: EditorState) => void;
   onRun: () => void;
   onFocusChat: () => void;
@@ -36,8 +37,9 @@ interface Props {
 }
 
 // Memoized: App re-renders on every streamed chat token, and Monaco is the
-// heaviest subtree — with stable props it skips those renders entirely.
-export default memo(function Editor({ onState, onRun, onFocusChat, onReady }: Props) {
+// heaviest subtree — with stable props it skips those renders entirely
+// (language only changes on an explicit toggle).
+export default memo(function Editor({ language, onState, onRun, onFocusChat, onReady }: Props) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   // Callbacks live in refs so Monaco commands registered once at mount never
   // capture stale closures.
@@ -110,7 +112,7 @@ export default memo(function Editor({ onState, onRun, onFocusChat, onReady }: Pr
 
   return (
     <MonacoEditor
-      language="cpp"
+      language={language}
       theme="vs-dark"
       defaultValue={DEFAULT_BUFFER}
       options={EDITOR_OPTIONS}
