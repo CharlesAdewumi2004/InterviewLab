@@ -28,8 +28,9 @@ export default memo(function ProblemPane({ problem, loading, error, onIntake }: 
       <div className="flex h-full flex-col gap-2 p-3">
         <h2 className="text-sm font-semibold text-neutral-300">New problem</h2>
         <p className="text-xs text-neutral-500">
-          Paste a rough problem — a LeetCode description, a note from a friend, anything. It gets formatted into a
-          statement, a starting stub and test cases.
+          Paste a rough problem — a LeetCode description, a note from a friend, anything. It gets re-dressed as a
+          realistic interview scenario (same underlying algorithm, disguised identity) with a starting stub and
+          hidden test cases.
         </p>
         <textarea
           value={raw}

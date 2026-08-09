@@ -13,10 +13,12 @@ repository.
   each distilled from real interviewing.io mock-interview transcripts (register, hint ladders,
   probe patterns, verbatim style exemplars) — plus a tutor who gives direct answers and a
   **Bloomberg mock interviewer** running the full grad-SWE mock process spec.
-- **Problem intake**: paste rough problem text; it becomes a bare interview-style statement, a
-  starting stub, test cases and a generated test harness. Constraints and examples are generated
-  too but stay **interviewer-private** — like a real interview, you only get the facts you ask
-  for, and unprompted discovery is what Axis A grades.
+- **Problem intake**: paste rough problem text; it becomes a **realistic interview scenario** —
+  the algorithm dressed in a concrete product/system story with its LeetCode identity disguised
+  (title, statement and stub all use the scenario's vocabulary; recognising the structure is
+  part of the exercise) — plus a starting stub, test cases and a generated harness. Constraints
+  and examples stay **interviewer-private** — like a real interview, you only get the facts you
+  ask for, and unprompted discovery is what Axis A grades.
 - **Compile and run** against the tests locally with ASan/UBSan on, results flowing straight
   into the AI's context — hit run, see three failures, and just type "why is that failing?".
 - **Formal grading**: every ended session is scored against `interview-grading-system.md` —
