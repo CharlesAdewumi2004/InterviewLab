@@ -115,4 +115,7 @@ export interface Session {
   // Model-produced scorecard from the last session:end, persisted with the
   // session file (the decision math lives in the gradebook, not here).
   debrief: Scorecard | null;
+  // Active system-design bank question (sysdesign persona) — id into
+  // DESIGN_BANK; the brief is injected into the persona's system prompt.
+  designQuestionId: string | null;
 }

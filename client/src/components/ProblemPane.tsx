@@ -1,15 +1,119 @@
-import { memo, useState } from 'react';
-import type { ClientProblem } from '../../../shared/protocol';
+import { memo, useEffect, useState } from 'react';
+import type { ClientProblem, DesignMeta, Persona } from '../../../shared/protocol';
 
 interface Props {
   problem: ClientProblem | null;
   loading: boolean;
   error: string | null;
+  persona: Persona;
+  designQuestion: DesignMeta | null;
   onIntake: (raw: string, delivery: 'text' | 'oral') => void;
+  onDesignPick: (id?: string) => void;
+}
+
+const DIFF_COLORS: Record<DesignMeta['difficulty'], string> = {
+  easy: 'bg-green-900/60 text-green-300',
+  medium: 'bg-yellow-900/60 text-yellow-300',
+  hard: 'bg-red-900/60 text-red-300',
+};
+
+// Sysdesign persona: the pane is a HelloInterview-style question bank —
+// pick a question (or randomize) and the interviewer states it in chat.
+function DesignBank({ designQuestion, onDesignPick }: { designQuestion: DesignMeta | null; onDesignPick: (id?: string) => void }) {
+  const [bank, setBank] = useState<DesignMeta[] | null>(null);
+  const [bankError, setBankError] = useState<string | null>(null);
+  const [changing, setChanging] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/design-questions')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: { questions: DesignMeta[] }) => setBank(data.questions))
+      .catch((err) => setBankError(err instanceof Error ? err.message : String(err)));
+  }, []);
+
+  if (designQuestion && !changing) {
+    return (
+      <div className="h-full space-y-3 overflow-y-auto p-3">
+        <div className="flex items-start justify-between gap-2">
+          <h2 className="text-base font-semibold text-neutral-100">{designQuestion.title}</h2>
+          <button
+            onClick={() => setChanging(true)}
+            className="shrink-0 rounded bg-neutral-800 px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-700"
+          >
+            Change
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className={`rounded px-2 py-0.5 font-medium ${DIFF_COLORS[designQuestion.difficulty]}`}>
+            {designQuestion.difficulty}
+          </span>
+          {designQuestion.patterns.map((p) => (
+            <span key={p} className="rounded bg-neutral-800 px-2 py-0.5 text-neutral-400">
+              {p}
+            </span>
+          ))}
+        </div>
+        <p className="text-xs text-neutral-500">Asked at: {designQuestion.asks.join(', ')}</p>
+        <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
+          🗣 The interviewer stated the prompt in chat — deliberately vague; requirements, numbers and scope are
+          yours to extract. Use the editor as your whiteboard (APIs, data model, capacity math, ASCII diagrams).
+        </p>
+        <div className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-600">
+          Delivery framework (you drive it): requirements ~5m · entities ~2m · API ~5m · high-level design ~10-15m ·
+          deep dives ~10m. A complete simple design beats a fancy incomplete one.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col gap-2 p-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-neutral-300">Design question bank</h2>
+        <button
+          onClick={() => {
+            setChanging(false);
+            onDesignPick();
+          }}
+          className="rounded bg-blue-700 px-2.5 py-1 text-xs font-medium hover:bg-blue-600"
+        >
+          🎲 Random
+        </button>
+      </div>
+      {bankError && <div className="rounded bg-red-900/40 px-2 py-1 text-xs text-red-300">{bankError}</div>}
+      {!bank && !bankError && <p className="text-xs text-neutral-500">Loading bank…</p>}
+      {bank && (
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+          {(['easy', 'medium', 'hard'] as const).map((tier) => (
+            <div key={tier}>
+              <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">{tier}</h3>
+              <div className="space-y-1">
+                {bank
+                  .filter((q) => q.difficulty === tier)
+                  .map((q) => (
+                    <button
+                      key={q.id}
+                      onClick={() => {
+                        setChanging(false);
+                        onDesignPick(q.id);
+                      }}
+                      className="block w-full rounded bg-neutral-900 px-2 py-1.5 text-left text-sm text-neutral-300 hover:bg-neutral-800"
+                    >
+                      {q.title}
+                      <span className="mt-0.5 block truncate text-[10px] text-neutral-600">{q.patterns.join(' · ')}</span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Memoized: props only change on intake events, not per streamed chat token.
-export default memo(function ProblemPane({ problem, loading, error, onIntake }: Props) {
+export default memo(function ProblemPane({ problem, loading, error, persona, designQuestion, onIntake, onDesignPick }: Props) {
   const [raw, setRaw] = useState('');
   const [delivery, setDelivery] = useState<'text' | 'oral'>('text');
   const [showIntake, setShowIntake] = useState(false);
@@ -21,6 +125,10 @@ export default memo(function ProblemPane({ problem, loading, error, onIntake }: 
     setLastProblem(problem);
     setShowIntake(false);
     setRaw('');
+  }
+
+  if (persona === 'sysdesign') {
+    return <DesignBank designQuestion={designQuestion} onDesignPick={onDesignPick} />;
   }
 
   if (!problem || showIntake) {

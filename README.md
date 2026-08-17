@@ -21,6 +21,13 @@ repository.
   ask for, and unprompted discovery is what Axis A grades.
 - **Compile and run** against the tests locally with ASan/UBSan on, results flowing straight
   into the AI's context — hit run, see three failures, and just type "why is that failing?".
+- **System-design practice bank** (HelloInterview-style): 16 questions across Easy/Medium/Hard
+  (Bitly → Ticketmaster → Uber/Robinhood/Top-K), each with a private interviewer brief —
+  requirements answer key, quantified NFRs, expected design, canonical deep dives, common
+  mistakes and per-level bars. Pick from the pane (or randomize); the interviewer states the
+  prompt vaguely in chat and releases facts only as you ask. Sessions are additionally graded
+  stage-by-stage against the delivery framework (requirements → entities → API → high-level →
+  deep dives) with a mid/senior/staff+ level signal (§8 of the grading doc, rubric v4).
 - **Formal grading**: every ended session is scored against `interview-grading-system.md` —
   behaviorally anchored axes (evidence-first, 1-4), with the weighted average, decision gates
   and hire recommendation computed deterministically server-side. Grades persist to

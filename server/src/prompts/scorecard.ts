@@ -9,6 +9,12 @@ THE NARRATION CHANNEL: "narration" is the candidate's spoken think-aloud while c
 - Channel ON (meaningful coverage): the narration timeline is primary Axis D evidence. Judge think-aloud continuity and quality from it — intent/invariant-level narration is the bar, and repeated >30s gaps during active coding WITHIN a mic-on span are silent grinding. Exception: the mic yields while the interviewer's reply is being read aloud, so a narration gap that coincides with an assistant turn is the interviewer talking, never candidate silence.
 - Channel OFF (or negligible coverage): the candidate's speech was NOT captured. Never infer silence or silent grinding from gaps — absence of narration is absence of evidence, not evidence of silence. Grade D only on what is observable in chat (hint uptake, integration of interviewer input, written check-ins); if that yields fewer than two specific observations, OMIT D entirely (Not Observed).
 
+SYSTEM-DESIGN SESSIONS: when the payload contains a "design_question" (with ground_truth), this was a system-design round. In ADDITION to the axes (E for the design itself, A for requirements work, D for communication), produce "design_review":
+- stages: score each delivery-framework stage 1-4 with evidence — requirements (top-3 functional as "users can..." statements, long lists are a NEGATIVE; quantified non-functional; no ritual capacity math), entities (quick nouns), api (REST-lenient: reasonable beats perfect, but time overrun is the failure), high_level (a simple COMPLETE end-to-end design before complexity — failing to deliver a working whole is the biggest failure in the round), deep_dives (depth in ~2 areas; capacity math exactly where a number changes a decision). Judge against the question's ground_truth: its requirements answer key, expected design, canonical deep dives and common mistakes. Omit a stage from the array only if the session ended before reaching it.
+- level_signal: below mid-level (no working end-to-end design even with steering) · mid-level (drove early stages to a working whole; needed the interviewer to point at deep-dive areas) · senior (proactively led ~2 deep dives with mechanism-level detail, never "I'll just use NoSQL") · staff+ (led the whole round as a peer, surfaced the hardest corners unprompted). Grade against the ground_truth's own per-level bars.
+- dimensions: one paragraph on depth, breadth and proactiveness (breadth expectations DECREASE with seniority; depth and proactiveness increase).
+Axis E and the stage scores must tell the same story. For non-design sessions set design_review to null.
+
 PAUSES: "pauses" records sanctioned breaks — the candidate paused the session clock (break or coaching). Every timestamp and duration you are given already excludes paused time, so never interpret a pause as silence, hesitation, or slow progress.
 
 PRINCIPLES (non-negotiable):
@@ -168,6 +174,33 @@ export const SCORECARD_SCHEMA = {
     next_drill: { type: 'string' },
     confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
     decision_observation: { type: 'string' },
+    design_review: {
+      anyOf: [
+        {
+          type: 'object',
+          properties: {
+            stages: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  stage: { type: 'string', enum: ['requirements', 'entities', 'api', 'high_level', 'deep_dives'] },
+                  score: { type: 'number', minimum: 1, maximum: 4 },
+                  evidence: { type: 'string' },
+                },
+                required: ['stage', 'score', 'evidence'],
+                additionalProperties: false,
+              },
+            },
+            level_signal: { type: 'string', enum: ['below mid-level', 'mid-level', 'senior', 'staff+'] },
+            dimensions: { type: 'string' },
+          },
+          required: ['stages', 'level_signal', 'dimensions'],
+          additionalProperties: false,
+        },
+        { type: 'null' },
+      ],
+    },
   },
   required: [
     'verdict',
@@ -182,6 +215,7 @@ export const SCORECARD_SCHEMA = {
     'next_drill',
     'confidence',
     'decision_observation',
+    'design_review',
   ],
   additionalProperties: false,
 } as const;

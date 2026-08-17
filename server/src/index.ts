@@ -14,6 +14,7 @@ import { ChatSession, maybeCompact, structuredCall } from './claude.js';
 import { ClangdSession } from './clangd.js';
 import { deleteGrade, listGrades, recordGrade } from './gradebook.js';
 import { dailyRecap } from './recap.js';
+import { getDesignQuestion, listDesignQuestions, randomDesignQuestion } from './sysdesign/bank.js';
 import { compileAndRun } from './runner.js';
 import { intakePrompt, INTAKE_SCHEMA } from './prompts/intake.js';
 import { SCORECARD_PROMPT, SCORECARD_SCHEMA } from './prompts/scorecard.js';
@@ -98,6 +99,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
     const s = store.session;
     const lastPause = s.pauseSpans[s.pauseSpans.length - 1];
     const pausedNow = lastPause !== undefined && lastPause.to === null;
+    const dq = s.designQuestionId ? getDesignQuestion(s.designQuestionId) : undefined;
     send({
       type: 'session:ready',
       sessionId: s.id,
@@ -111,6 +113,9 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
       paused: pausedNow,
       pausedMs: s.pauseSpans.reduce((sum, sp) => sum + (sp.to !== null ? sp.to - sp.from : 0), 0),
       pausedAt: pausedNow ? lastPause.from : null,
+      designQuestion: dq
+        ? { id: dq.id, title: dq.title, difficulty: dq.difficulty, asks: dq.asks, patterns: dq.patterns }
+        : null,
     });
   };
   announceSession(resumed);
@@ -289,6 +294,15 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
               brief: s.problem.brief,
             }
           : null,
+        // System-design session: the bank question's full ground truth, so
+        // the grader judges the design against what was actually expected
+        // (stages, deep dives, level bars) rather than its own improvisation.
+        design_question: (() => {
+          const q = s.designQuestionId ? getDesignQuestion(s.designQuestionId) : undefined;
+          return q
+            ? { title: q.title, difficulty: q.difficulty, prompt: q.prompt, ground_truth: q.brief }
+            : null;
+        })(),
         transcript: s.turns.map((t) => ({
           at: minutesIn(t.at),
           role: t.role,
@@ -397,6 +411,29 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         store.setPaused(msg.paused);
         store.save();
         break;
+      case 'design:pick': {
+        // Deliberately model-free: the bank has the exact spoken prompt, so
+        // the interviewer "states" it as a canned turn — instant, and it works
+        // even when the subscription's rate window is exhausted. The fresh
+        // runtime replays this turn from history on the first real message.
+        if (chatBusy) {
+          send({ type: 'chat:error', message: 'Still responding — pick a design question after this reply.' });
+          break;
+        }
+        const q = (msg.id ? getDesignQuestion(msg.id) : undefined) ?? randomDesignQuestion();
+        store.setDesignQuestion(q.id);
+        resetChat(); // system prompt now carries the question's private brief
+        send({
+          type: 'design:ready',
+          question: { id: q.id, title: q.title, difficulty: q.difficulty, asks: q.asks, patterns: q.patterns },
+        });
+        const turn: Turn = { role: 'assistant', content: q.prompt, at: Date.now(), persona: store.session.persona };
+        store.addTurn(turn);
+        store.save();
+        send({ type: 'chat:delta', text: q.prompt });
+        send({ type: 'chat:done', turn });
+        break;
+      }
       case 'session:reset': {
         // Persist the outgoing session (no-op if nothing happened in it),
         // swap in a fresh store — keeping the chosen persona — and rebuild
@@ -452,6 +489,8 @@ if (process.env.SERVE_CLIENT !== '0' && fs.existsSync(path.join(CLIENT_DIST, 'in
 fastify.get('/health', async () => ({ ok: true }));
 // Gradebook, oldest-first — powers the Progress view.
 fastify.get('/api/progress', async () => ({ grades: listGrades() }));
+// System-design bank: client-safe metadata only (briefs never leave the server).
+fastify.get('/api/design-questions', async () => ({ questions: listDesignQuestions() }));
 // Gradebook row removal (the session JSON on disk is kept). The db is plain
 // SQLite at sessions/gradebook.db for anything beyond delete.
 fastify.delete('/api/progress/:sessionId', async (request, reply) => {

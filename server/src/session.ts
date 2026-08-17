@@ -80,6 +80,7 @@ export class SessionStore {
       compactSummary: null,
       compactedThrough: 0,
       debrief: null,
+      designQuestionId: null,
     };
     this.lastTurnBuffer = this.session.buffer;
   }
@@ -184,6 +185,10 @@ export class SessionStore {
     const open = spans.length > 0 && spans[spans.length - 1].to === null;
     if (on && !open) spans.push({ from: Date.now(), to: null });
     else if (!on && open) spans[spans.length - 1].to = Date.now();
+  }
+
+  setDesignQuestion(id: string): void {
+    this.session.designQuestionId = id;
   }
 
   // Open/close a pause span. Idempotent, same shape as setNarrationState.

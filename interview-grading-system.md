@@ -220,3 +220,43 @@ Maintained as a running log so drills target real trends, not one-off noise:
 - **Recurring evidence:** any identical weakness quoted in two consecutive debriefs is escalated: subsequent sessions deliberately stress it, and it stays on the list until it produces a 3+ under stress.
 
 **Readiness bar (when to book the real interview):** three consecutive full-interview sims at Hire or better, no red flags, D ≥ 3 in all of them **with the narration channel on** (a D scored without captured think-aloud doesn't count toward readiness — the real interview is spoken), and at most one level-1/2 hint per problem.
+
+---
+
+## 8. System-Design Delivery Rubric (rubric v4)
+
+System-design sessions run against a question from the design bank and are additionally
+reviewed stage-by-stage against the delivery framework (modeled on HelloInterview's published
+framework and evaluation guidance). This review is **structured evidence for Axis E** — the §5
+decision math is unchanged; the stage scores and Axis E must tell the same story.
+
+**The stages and budgets** (the candidate drives them unprompted; drift is signal):
+
+| Stage | Budget | What good looks like |
+|---|---|---|
+| Requirements | ~5 min | Top ~3 functional requirements as "users can…" statements — a long list is a NEGATIVE; non-functional requirements contextualized and quantified. No ritual capacity math. |
+| Core entities | ~2 min | The nouns of the system, quickly — not a full schema. |
+| API | ~5 min | REST by default; reasonable > perfect (pagination present beats pagination optimal). **Time overrun here is the failure mode, not imperfection — grade the API leniently and the clock strictly.** |
+| High-level design | ~10-15 min | A simple, COMPLETE, end-to-end design satisfying the functional requirements before any complexity. Failing to deliver a working whole is the single biggest failure mode in the round. |
+| Deep dives | ~10 min | Depth in ~2 areas. Capacity math appears here, exactly where a number changes a decision. |
+
+**Stage anchors (1-4, same scale as the axes):** 1 = stage skipped or actively harmful (e.g.
+requirement sprawl, API rabbit-hole eating the design time); 2 = present but shallow or badly
+budgeted; 3 = solid — meets the bar above; 4 = exemplary and proactively driven.
+
+**Level calibration** — evaluation shifts across three dimensions: **depth**, **breadth**, and
+**proactiveness**. Breadth expectations *decrease* with seniority; depth and proactiveness
+increase. The grader reports a `level_signal`:
+
+- **below mid-level** — did not deliver a working end-to-end design even with steering.
+- **mid-level** — drove the early stages (requirements, API, entities, high-level design) to a
+  working whole; needed the interviewer to point at weaknesses for deep dives.
+- **senior** — proactively identified and led ~2 deep dives with practical, mechanism-level
+  detail (never "I'll just use NoSQL"); owned the trade-offs.
+- **staff+** — led the entire round as a peer; proactively surfaced the question's hardest
+  corners (multi-region, failure modes, evolution) without prompting.
+
+The four evaluation lenses (problem solving, solution design, technical excellence,
+communication) map onto the existing axes: problem solving → A, solution design + technical
+excellence → E, communication → D. The stage review, level signal and a one-paragraph
+depth/breadth/proactiveness read are recorded alongside the axes in the gradebook.

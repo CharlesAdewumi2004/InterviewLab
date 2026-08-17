@@ -3,6 +3,7 @@ import type {
   BuildResult,
   ClientMessage,
   ClientProblem,
+  DesignMeta,
   GradeSummary,
   Language,
   Persona,
@@ -28,6 +29,7 @@ export default function App() {
   const [persona, setPersona] = useState<Persona>('interviewer');
   const [language, setLanguage] = useState<Language>('cpp');
   const [problem, setProblem] = useState<ClientProblem | null>(null);
+  const [designQuestion, setDesignQuestion] = useState<DesignMeta | null>(null);
   const [intakeLoading, setIntakeLoading] = useState(false);
   const [intakeError, setIntakeError] = useState<string | null>(null);
 
@@ -91,6 +93,7 @@ export default function App() {
         setPauseState({ paused: msg.paused, pausedMs: msg.pausedMs, pausedAt: msg.pausedAt });
         setPersona(msg.persona);
         setLanguage(msg.language);
+        setDesignQuestion(msg.designQuestion);
         setTurns(msg.turns);
         setProblem(msg.problem);
         setStreamText(null);
@@ -119,6 +122,12 @@ export default function App() {
         }
         break;
       }
+      case 'design:ready':
+        setDesignQuestion(msg.question);
+        // The interviewer's canned statement streams next as chat:delta —
+        // prime the speaker so voice mode reads it aloud.
+        if (voiceModeRef.current) speakerRef.current.beginReply();
+        break;
       case 'problem:ready':
         setIntakeLoading(false);
         setIntakeError(null);
@@ -369,6 +378,15 @@ export default function App() {
 
   const handleProgress = useCallback(() => setShowProgress(true), []);
 
+  const handleDesignPick = useCallback(
+    (id?: string) => {
+      if (!send({ type: 'design:pick', id })) {
+        setChatError('Not connected — reconnecting. Try picking again in a moment.');
+      }
+    },
+    [send],
+  );
+
   // Stable references so the memoized Editor never re-renders during
   // token-by-token chat streaming (App re-renders on every delta).
   const handleEditorState = useCallback(
@@ -412,7 +430,15 @@ export default function App() {
 
       <div className="flex min-h-0 flex-1">
         <div className="w-[22%] min-w-[260px] border-r border-neutral-800">
-          <ProblemPane problem={problem} loading={intakeLoading} error={intakeError} onIntake={handleIntake} />
+          <ProblemPane
+            problem={problem}
+            loading={intakeLoading}
+            error={intakeError}
+            persona={persona}
+            designQuestion={designQuestion}
+            onIntake={handleIntake}
+            onDesignPick={handleDesignPick}
+          />
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col">

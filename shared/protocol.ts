@@ -112,6 +112,8 @@ export interface Scorecard {
   next_drill: string;
   confidence: 'low' | 'medium' | 'high';
   decision_observation: string;
+  // Present only for system-design sessions (a bank question was active).
+  design_review: DesignReview | null;
 }
 
 export type SessionMode = 'coding' | 'full_interview' | 'system_design' | 'behavioral';
@@ -148,6 +150,31 @@ export interface GradeRecord extends GradeSummary {
   persona: Persona;
   problemTitle: string | null;
   axes: ScorecardAxis[];
+  designReview: DesignReview | null;
+}
+
+// System-design question bank (HelloInterview-style): client-safe metadata
+// only — the interviewer's per-question ground truth never crosses the socket.
+export interface DesignMeta {
+  id: string;
+  title: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  asks: string[];
+  patterns: string[];
+}
+
+// Per-stage review of a system-design session (HelloInterview delivery
+// framework stages), produced by the grader alongside the axes. Null for
+// non-design sessions.
+export interface DesignReview {
+  stages: {
+    stage: 'requirements' | 'entities' | 'api' | 'high_level' | 'deep_dives';
+    score: number; // 1-4, same scale as axes
+    evidence: string;
+  }[];
+  level_signal: 'below mid-level' | 'mid-level' | 'senior' | 'staff+';
+  // One-paragraph read on the three level dimensions: depth, breadth, proactiveness.
+  dimensions: string;
 }
 
 // End-of-day recap across every session practised that day, produced by the
@@ -190,6 +217,10 @@ export type ClientMessage =
   // Discard the current session and start a fresh one on the same connection
   // (the old session is persisted to disk if anything happened in it).
   | { type: 'session:reset' }
+  // Pick a system-design question from the bank (random when id is omitted).
+  // The interviewer states the prompt in chat; the private brief becomes its
+  // ground truth. Only meaningful with the sysdesign persona.
+  | { type: 'design:pick'; id?: string }
   // Semantic autocomplete: clangd runs server-side; the client ships the whole
   // buffer per request (the server owns LSP document sync) and gets the raw
   // LSP result back. line/column are Monaco's 1-based coordinates.
@@ -216,7 +247,9 @@ export type ServerMessage =
       paused: boolean;
       pausedMs: number;
       pausedAt: number | null;
+      designQuestion: DesignMeta | null;
     }
+  | { type: 'design:ready'; question: DesignMeta }
   | { type: 'problem:ready'; problem: ClientProblem; buffer: string }
   | { type: 'problem:error'; message: string }
   | { type: 'chat:delta'; text: string }

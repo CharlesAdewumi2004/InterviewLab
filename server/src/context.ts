@@ -1,5 +1,6 @@
 import type { EditSummary, NarrationSegment, Session } from './types.js';
 import { activeMs } from './session.js';
+import { designBriefBlock, getDesignQuestion } from './sysdesign/bank.js';
 import { INTERVIEWER_PROMPT } from './prompts/interviewer.js';
 import { TUTOR_PROMPT } from './prompts/tutor.js';
 import { BLOOMBERG_PROMPT } from './prompts/bloomberg.js';
@@ -49,6 +50,13 @@ export function buildSystemPrompt(session: Session): string {
     blocks.push(
       'NOTE: this session is in PYTHON, not C++. Judge idiomatic Python (comprehensions, generators, dict/set fluency, standard-library reach) at the same bar — any C++-specific calibration in your instructions maps to its Python equivalent.',
     );
+  }
+
+  // Sysdesign persona with a bank question active: inject its private ground
+  // truth (requirements answer key, expected design, deep dives, level bars).
+  if (session.persona === 'sysdesign' && session.designQuestionId) {
+    const q = getDesignQuestion(session.designQuestionId);
+    if (q) blocks.push(designBriefBlock(q));
   }
 
   const p = session.problem;

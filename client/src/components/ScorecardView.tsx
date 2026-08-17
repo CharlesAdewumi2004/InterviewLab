@@ -64,6 +64,42 @@ export default function ScorecardView({ scorecard, grade, onClose }: Props) {
           ))}
         </section>
 
+        {scorecard.design_review && (
+          <section className="mb-4">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              Delivery framework review (§8)
+              <span className="ml-2 rounded bg-blue-900/60 px-2 py-0.5 text-[10px] font-semibold normal-case text-blue-200">
+                level signal: {scorecard.design_review.level_signal}
+              </span>
+            </h3>
+            <div className="mb-2 space-y-1.5">
+              {scorecard.design_review.stages.map((s) => (
+                <div key={s.stage} className="flex items-start gap-3 rounded bg-neutral-800/70 p-2">
+                  <div className="w-14 shrink-0 text-center">
+                    <div className="text-lg font-bold text-blue-400">{s.score}/4</div>
+                    <div className="text-[9px] uppercase text-neutral-500">
+                      {
+                        {
+                          requirements: 'Reqs',
+                          entities: 'Entities',
+                          api: 'API',
+                          high_level: 'High-level',
+                          deep_dives: 'Deep dives',
+                        }[s.stage]
+                      }
+                    </div>
+                  </div>
+                  <div className="text-xs text-neutral-400">{s.evidence}</div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs leading-relaxed text-neutral-400">
+              <span className="font-semibold text-neutral-300">Depth · breadth · proactiveness: </span>
+              {scorecard.design_review.dimensions}
+            </p>
+          </section>
+        )}
+
         {scorecard.hints.length > 0 && (
           <section className="mb-4">
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Hint log</h3>

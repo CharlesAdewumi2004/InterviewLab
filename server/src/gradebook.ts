@@ -3,6 +3,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
   AxisId,
+  DesignReview,
   GradeRecord,
   GradeSummary,
   Persona,
@@ -23,7 +24,9 @@ import type { Session } from './types.js';
 // v3: data-grounded against the outcome-labeled interviewing.io corpus —
 // behavioral mode added, gates 6 (C ≤ 2) and 7 (two axes ≤ 2 → No Hire),
 // per-axis calibration notes in the doc and scorecard prompt.
-export const RUBRIC_VERSION = 3;
+// v4: §8 system-design delivery rubric — per-stage review + level signal for
+// design-bank sessions, stored alongside the axes.
+export const RUBRIC_VERSION = 4;
 
 // §3 — per-mode axis weights.
 const WEIGHTS: Record<SessionMode, Partial<Record<AxisId, number>>> = {
@@ -160,12 +163,19 @@ function open(): DatabaseSync {
       tests_passed      INTEGER,
       tests_total       INTEGER,
       time_to_green_min REAL,
-      narration_coverage_pct REAL
+      narration_coverage_pct REAL,
+      design_review_json TEXT
     );
   `);
   // Migration for gradebooks created before narration coverage was tracked.
   try {
     db.exec('ALTER TABLE grades ADD COLUMN narration_coverage_pct REAL');
+  } catch {
+    // column already exists
+  }
+  // Migration for gradebooks created before the §8 design review (rubric v4).
+  try {
+    db.exec('ALTER TABLE grades ADD COLUMN design_review_json TEXT');
   } catch {
     // column already exists
   }
@@ -210,8 +220,9 @@ export function recordGrade(opts: {
       `INSERT OR REPLACE INTO grades
        (session_id, graded_at, rubric_version, mode, persona, problem_title, weighted, provisional,
         recommendation, gates_json, axes_json, hint_avg_level, clarification_hits, red_flags, green_flags,
-        duration_min, runs, build_failures, tests_passed, tests_total, time_to_green_min, narration_coverage_pct)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        duration_min, runs, build_failures, tests_passed, tests_total, time_to_green_min, narration_coverage_pct,
+        design_review_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       session.id,
@@ -236,6 +247,7 @@ export function recordGrade(opts: {
       grade.testsTotal,
       grade.timeToGreenMin,
       grade.narrationCoveragePct,
+      scorecard.design_review ? JSON.stringify(scorecard.design_review) : null,
     );
   return grade;
 }
@@ -275,5 +287,6 @@ export function listGrades(): GradeRecord[] {
     testsTotal: r.tests_total as number | null,
     timeToGreenMin: r.time_to_green_min as number | null,
     narrationCoveragePct: r.narration_coverage_pct as number | null,
+    designReview: r.design_review_json ? (JSON.parse(r.design_review_json as string) as DesignReview) : null,
   }));
 }
