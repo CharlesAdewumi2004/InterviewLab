@@ -16,6 +16,7 @@ import { deleteGrade, listGrades, recordGrade } from './gradebook.js';
 import { dailyRecap } from './recap.js';
 import { getDesignQuestion, listDesignQuestions, randomDesignQuestion } from './sysdesign/bank.js';
 import { clearCv, cvStatus, setCv } from './cv.js';
+import { listCodingQuestions } from './coding-bank.js';
 import { compileAndRun } from './runner.js';
 import { intakePrompt, INTAKE_SCHEMA } from './prompts/intake.js';
 import { SCORECARD_PROMPT, SCORECARD_SCHEMA } from './prompts/scorecard.js';
@@ -497,6 +498,9 @@ fastify.get('/health', async () => ({ ok: true }));
 fastify.get('/api/progress', async () => ({ grades: listGrades() }));
 // System-design bank: client-safe metadata only (briefs never leave the server).
 fastify.get('/api/design-questions', async () => ({ questions: listDesignQuestions() }));
+// Coding bank: frequency-grounded suggestions (Bloomberg tier-1 + grad top-40).
+// Seeds are inputs, not answer keys — intake re-dresses them as scenarios.
+fastify.get('/api/coding-questions', async () => ({ questions: listCodingQuestions() }));
 
 // Candidate CV: uploaded as PDF (parsed server-side) or plain text, stored
 // locally in sessions/cv.txt (git-ignored), injected into the behavioral and

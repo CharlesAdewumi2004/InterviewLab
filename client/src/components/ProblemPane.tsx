@@ -113,10 +113,40 @@ function DesignBank({ designQuestion, onDesignPick }: { designQuestion: DesignMe
 }
 
 // Memoized: props only change on intake events, not per streamed chat token.
+interface CodingSuggestion {
+  id: string;
+  title: string;
+  lc: number | null;
+  topic: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  pools: ('bloomberg' | 'general')[];
+  seed: string;
+}
+
 export default memo(function ProblemPane({ problem, loading, error, persona, designQuestion, onIntake, onDesignPick }: Props) {
   const [raw, setRaw] = useState('');
   const [delivery, setDelivery] = useState<'text' | 'oral'>('text');
   const [showIntake, setShowIntake] = useState(false);
+  // Frequency-grounded suggestions (Bloomberg tier-1 / grad top-40) — the
+  // pick fills the intake box; Format then disguises it as a scenario.
+  const [suggestions, setSuggestions] = useState<CodingSuggestion[] | null>(null);
+  const [picked, setPicked] = useState<CodingSuggestion | null>(null);
+
+  useEffect(() => {
+    fetch('/api/coding-questions')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: { questions: CodingSuggestion[] }) => setSuggestions(data.questions))
+      .catch(() => setSuggestions(null));
+  }, []);
+
+  const suggest = (pool: 'bloomberg' | 'general') => {
+    if (!suggestions) return;
+    const inPool = suggestions.filter((q) => q.pools.includes(pool));
+    const q = inPool[Math.floor(Math.random() * inPool.length)];
+    if (!q) return;
+    setPicked(q);
+    setRaw(`${q.title}: ${q.seed}`);
+  };
 
   // When a (re-)intake succeeds, snap back to the problem view — staying on
   // the form made a successful "Format problem" look like a silent failure.
@@ -140,9 +170,35 @@ export default memo(function ProblemPane({ problem, loading, error, persona, des
           realistic interview scenario (same underlying algorithm, disguised identity) with a starting stub and
           hidden test cases.
         </p>
+        {suggestions && (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => suggest('bloomberg')}
+              title="Random pick from the most-asked Bloomberg-tagged questions (July 2026 frequency data + candidate reports)"
+              className="rounded bg-neutral-800 px-2 py-1 text-xs text-orange-300 hover:bg-neutral-700"
+            >
+              🎲 Bloomberg pick
+            </button>
+            <button
+              onClick={() => suggest('general')}
+              title="Random pick from the grad-level big-tech top-40"
+              className="rounded bg-neutral-800 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
+            >
+              🎲 Big-tech pick
+            </button>
+            {picked && (
+              <span className="truncate text-[10px] text-neutral-500">
+                {picked.topic} · {picked.difficulty}
+              </span>
+            )}
+          </div>
+        )}
         <textarea
           value={raw}
-          onChange={(e) => setRaw(e.target.value)}
+          onChange={(e) => {
+            setRaw(e.target.value);
+            setPicked(null);
+          }}
           placeholder="Design a data structure for an LRU cache…"
           className="min-h-0 flex-1 resize-none rounded border border-neutral-700 bg-neutral-900 p-2 text-sm outline-none focus:border-blue-600"
         />

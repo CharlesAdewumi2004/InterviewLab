@@ -964,6 +964,180 @@ export const DESIGN_BANK: DesignQuestion[] = [
       },
     },
   },
+  {
+    id: 'market-data-feed',
+    title: 'Real-Time Market Data Feed (Stock Ticker)',
+    difficulty: 'hard',
+    asks: ['Bloomberg', 'Refinitiv', 'trading firms'],
+    patterns: ['Pushing Realtime Updates', 'Scaling Reads', 'Scaling Writes'],
+    prompt:
+      "Let's design a real-time market data service: exchange feeds come in, and millions of terminal users watch live prices for the instruments they care about.",
+    brief: {
+      functional: [
+        'Ingest price ticks from upstream exchange feeds (thousands of instruments)',
+        'Users subscribe to instruments and see updates in near-real-time',
+        'Snapshot on subscribe (current price immediately, then deltas)',
+      ],
+      nonFunctional: [
+        'End-to-end latency budget ~100ms for display (not HFT — say so and scope it)',
+        'Scale: ~500K instruments, ~1M ticks/sec aggregate peak, 1M+ concurrent subscribers',
+        'No user may see prices going backwards (per-instrument ordering)',
+        'Availability over completeness for display: dropping a tick is fine, showing a stale price as live is not',
+      ],
+      entities: ['Instrument', 'Tick (instrument, price, size, ts, seq)', 'Subscription', 'Snapshot'],
+      apiSketch: [
+        'WebSocket/SSE: subscribe {instruments[]} -> snapshot + delta stream',
+        '(Internal) feed handler ingest — the API step is short here; the fan-out IS the design',
+      ],
+      highLevel:
+        'Feed handlers normalize exchange input → per-instrument channels on a pub/sub layer → fan-out/edge servers hold subscriber connections and forward deltas; a last-value cache serves snapshots on subscribe. One upstream consumer per feed, N-subscriber fan-out trees — never per-user upstream work.',
+      capacityMoments: [
+        '1M ticks/sec but a user watches ~20 instruments: per-subscriber egress is tiny; the product ticks×subscribers only explodes if you fan out naively per-user upstream — the math justifies per-instrument channels + conflation',
+        'Hot instruments (index futures at open) have 100K+ subscribers on ONE channel → replicated fan-out nodes per hot channel; conflation to ~1 update/sec/instrument for display cuts egress ~100x — do this number',
+      ],
+      deepDives: [
+        {
+          topic: 'Conflation',
+          expected:
+            'Display users need the LATEST price, not every tick: per-instrument conflation queues (keep last value, drop intermediate) at the fan-out edge; why this preserves correctness for display but would be wrong for an execution feed — the product-decision framing is the senior signal.',
+        },
+        {
+          topic: 'Ordering and gap handling',
+          expected: 'Sequence numbers per instrument; on gap: snapshot re-sync rather than blocking (contrast with order-execution feeds where gaps demand recovery/replay).',
+        },
+        {
+          topic: 'Slow consumers',
+          expected: 'A slow client must not back-pressure the tree: bounded per-connection buffers, conflate harder or disconnect; never buffer unboundedly.',
+        },
+      ],
+      commonMistakes: [
+        'Fanning out every tick to every subscriber without conflation',
+        'A database on the hot path of tick delivery',
+        'Treating display and execution feeds as the same consistency problem',
+      ],
+      levels: {
+        mid: 'Feed → pub/sub → subscriber fan-out with snapshot+delta and a sane subscription model.',
+        senior: 'Owns conflation as a product decision with egress math, hot-instrument replication, and slow-consumer policy unprompted.',
+        staffPlus: 'Leads multi-region distribution, feed-handler failover without price regression, and entitlement (who may see what) as a first-class concern.',
+      },
+    },
+  },
+  {
+    id: 'price-alerts',
+    title: 'Price Alert Service',
+    difficulty: 'medium',
+    asks: ['Bloomberg', 'Robinhood', 'Amazon'],
+    patterns: ['Pushing Realtime Updates', 'Scaling Writes', 'Managing Long-Running Tasks'],
+    prompt:
+      "Let's design a price-alert service: users set rules like 'tell me if AAPL crosses 200' or 'notify me if it moves 5% in an hour', and we notify them when it happens.",
+    brief: {
+      functional: [
+        'Create/delete alert rules (threshold cross; percent move over a window)',
+        'Evaluate rules against the live price stream',
+        'Deliver notifications (push/email) — at least once, quickly',
+      ],
+      nonFunctional: [
+        'Notification within ~5s of the triggering tick',
+        'Scale: 100M standing alerts across ~500K instruments; tick stream ~100K/sec',
+        'No missed triggers (an alert that should fire must fire); duplicate suppression per rule',
+        'A fired one-shot alert disarms; recurring alerts re-arm after a cool-down',
+      ],
+      entities: ['AlertRule (userId, instrument, condition, state: armed|fired)', 'Tick', 'Notification'],
+      apiSketch: [
+        'POST /alerts {instrument, condition} / DELETE /alerts/{id} / GET /alerts',
+        '(Internal) evaluator consumes the tick stream; notifier consumes trigger events',
+      ],
+      highLevel:
+        'Rules DB + rule index keyed by instrument loaded into evaluator shards (sharded by instrument); evaluators consume the tick stream, match conditions in memory, emit trigger events to a queue; notification workers deliver with retries. The key insight: index rules BY INSTRUMENT so a tick touches only its own rules, never a scan of 100M.',
+      capacityMoments: [
+        '100M rules ÷ 500K instruments ≈ 200 rules/instrument average — per-tick evaluation is tiny IF indexed by instrument; a popular instrument may hold 1M+ rules → sort thresholds so a price move binary-searches the fired range instead of scanning — this data-structure moment is the interview',
+        'Percent-move windows need per-(rule or instrument) rolling state: instrument-level rolling min/max per window makes evaluation O(1) per rule — memory math: 500K instruments × window buckets, trivially feasible',
+      ],
+      deepDives: [
+        {
+          topic: 'Threshold indexing',
+          expected: 'Sorted threshold structure per instrument (ordered map/skip list): a tick from P1→P2 fires exactly the rules with thresholds in (P1, P2]; re-arm/cool-down state machine.',
+        },
+        {
+          topic: 'Exactly-once-ish delivery',
+          expected: 'At-least-once queue + idempotent notification keyed by (ruleId, triggerWindow); why a missed trigger is worse than a duplicate here, and where the reverse holds.',
+        },
+        {
+          topic: 'Evaluator failover',
+          expected: 'Shard reassignment on evaluator death: rules reload from DB, rolling windows rebuild from recent ticks (or accept a bounded blind spot — state the trade).',
+        },
+      ],
+      commonMistakes: [
+        'Evaluating every rule on every tick (no instrument index)',
+        'Storing rolling window state per-rule when per-instrument suffices',
+        'Fire-and-forget notifications with no dedup or retry story',
+      ],
+      levels: {
+        mid: 'Instrument-indexed evaluation with a queue to notifiers, sane rule lifecycle.',
+        senior: 'Owns the sorted-threshold structure, per-instrument window state, and delivery semantics with the 100M-rule math unprompted.',
+        staffPlus: 'Leads evaluator sharding/failover with bounded blind spots, hot-instrument rule skew, and rule-update consistency while ticks flow.',
+      },
+    },
+  },
+  {
+    id: 'matching-engine',
+    title: 'Order Book / Matching Engine',
+    difficulty: 'hard',
+    asks: ['IMC', 'Citadel', 'Bloomberg', 'Coinbase'],
+    patterns: ['Dealing with Contention', 'Multi-Step Processes'],
+    prompt:
+      "Let's design the heart of an exchange: an order matching engine. Limit and market orders come in; your job is to match buyers and sellers correctly and fast. (This one often turns into design-then-implement — be ready to code the core.)",
+    brief: {
+      functional: [
+        'Accept limit and market orders; cancel outstanding orders',
+        'Match by price-time priority; partial fills allowed',
+        'Publish executions and book updates (top-of-book at minimum)',
+      ],
+      nonFunctional: [
+        'Strict determinism: same input sequence → same fills, always (correctness is the product)',
+        'Latency: microseconds-to-low-milliseconds per order at the engine — which forces single-threaded-per-instrument design, not locks',
+        'Throughput: ~100K orders/sec per hot instrument at open',
+        'Total auditability: every state transition journaled for replay',
+      ],
+      entities: ['Order (id, side, type, price, qty, ts)', 'OrderBook (bids, asks)', 'Fill/Execution', 'BookLevel'],
+      apiSketch: [
+        'submit(order) -> ack + fills; cancel(orderId) -> ack',
+        '(This is a component design — say the API is internal and spend the time on the book structure)',
+      ],
+      highLevel:
+        'Per-instrument single-threaded engine consuming an ordered input queue: the order book as two price-level structures (bids max-first, asks min-first), each level a FIFO queue of orders (price-time priority). Incoming order crosses the opposite book while it can, remainder rests. Journal input sequence for determinism/recovery. No locks, no distributed anything inside one instrument — the design insight IS that serialization beats parallelism here.',
+      capacityMoments: [
+        '100K orders/sec ÷ single thread = 10µs/order budget — this number kills any locking/DB design and justifies in-memory structures; say it early',
+        'Book structure choice: sorted map of price levels (O(log L) worst) vs array-indexed price ladder around the touch (O(1) hot path) — tick-size and price-band reasoning; L is small in practice',
+      ],
+      deepDives: [
+        {
+          topic: 'Data-structure mechanics (often implemented live)',
+          expected:
+            'Price levels: ordered map or ladder; per-level FIFO with O(1) cancel via order-id → node handle (intrusive list + hashmap). Walk through a market order eating multiple levels and a partial fill resting.',
+        },
+        {
+          topic: 'Determinism and recovery',
+          expected: 'Input journaling + replay reproduces the book exactly; snapshots bound replay time; why matching logic must be pure (no wall-clock, no randomness).',
+        },
+        {
+          topic: 'Scaling across instruments',
+          expected: 'Shard BY INSTRUMENT (books are independent) — thousands of engines behind an order router; cross-instrument features (risk checks) live outside the hot path.',
+        },
+      ],
+      commonMistakes: [
+        'Concurrent threads mutating one book with locks',
+        'Database reads/writes on the matching hot path',
+        'Ignoring cancels (real books see more cancels than trades)',
+        'Non-deterministic matching (iteration order, timestamps taken mid-match)',
+      ],
+      levels: {
+        mid: 'Correct price-time matching with sane book structures; can implement add/match/cancel when asked.',
+        senior: 'Owns the single-threaded-determinism argument with the µs math, O(1) cancel design, and journaling unprompted.',
+        staffPlus: 'Leads recovery/snapshotting, instrument sharding with an order router, risk-check placement, and market-data publication without disturbing the hot path.',
+      },
+    },
+  },
 ];
 
 export function getDesignQuestion(id: string): DesignQuestion | undefined {
