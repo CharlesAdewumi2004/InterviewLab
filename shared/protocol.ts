@@ -221,6 +221,9 @@ export type ClientMessage =
   // The interviewer states the prompt in chat; the private brief becomes its
   // ground truth. Only meaningful with the sysdesign persona.
   | { type: 'design:pick'; id?: string }
+  // The CV changed via HTTP upload (PUT/DELETE /api/cv) — rebuild the chat
+  // runtime so the persona's context picks it up.
+  | { type: 'cv:updated' }
   // Semantic autocomplete: clangd runs server-side; the client ships the whole
   // buffer per request (the server owns LSP document sync) and gets the raw
   // LSP result back. line/column are Monaco's 1-based coordinates.

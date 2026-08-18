@@ -41,6 +41,15 @@ function personaLabel(p: Persona): string {
   return 'Tutor';
 }
 
+// Reads naturally in a sentence ("talk to the …").
+function personaChatLabel(p: Persona): string {
+  if (p === 'sysdesign') return 'design interviewer';
+  if (p === 'behavioral') return 'behavioral interviewer';
+  if (p === 'bloomberg') return 'Bloomberg interviewer';
+  if (p === 'tutor') return 'tutor';
+  return 'interviewer';
+}
+
 // Memoized: the transcript can get long, and without this every streamed
 // token re-renders every historical bubble.
 const TurnList = memo(function TurnList({ turns }: { turns: Turn[] }) {
@@ -218,7 +227,7 @@ export default function ChatPane({
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-3">
         {turns.length === 0 && !streamText && (
           <p className="text-sm text-neutral-500">
-            Talk to the {personaLabel(persona).toLowerCase()} — they can already see your code, build status and
+            Talk to the {personaChatLabel(persona)} — they can already see your code, build status and
             test results. No need to paste anything.
             {speechInputSupported &&
               ' Hold Ctrl+Space (or F8) to speak — release to send. Or tap it to toggle the mic on hands-free; tap again to send.'}

@@ -17,9 +17,12 @@ import Editor, { type EditorApi, type EditorState } from './components/Editor';
 import ChatPane from './components/ChatPane';
 import ProblemPane from './components/ProblemPane';
 import Console from './components/Console';
-import Toolbar from './components/Toolbar';
+import NavBar from './components/NavBar';
+import WorkspaceBar from './components/WorkspaceBar';
+import HomePage from './components/HomePage';
 import ScorecardView from './components/ScorecardView';
 import ProgressView from './components/ProgressView';
+import { useHashRoute } from './hooks/useHashRoute';
 import { NarrationCapture, SentenceSpeaker } from './lib/voice';
 import { bindLspSend, handleLspMessage } from './lib/lsp';
 
@@ -53,7 +56,7 @@ export default function App() {
   const pausedRef = useRef(false);
   const [endingSession, setEndingSession] = useState(false);
   const [debrief, setDebrief] = useState<DebriefState>(null);
-  const [showProgress, setShowProgress] = useState(false);
+  const [route, navigate] = useHashRoute();
 
   const editorApiRef = useRef<EditorApi | null>(null);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -376,7 +379,32 @@ export default function App() {
     // The fresh session:ready that follows resets all client state.
   }, [send]);
 
-  const handleProgress = useCallback(() => setShowProgress(true), []);
+  // Route drives persona: the design/behavioral pages pin their persona, and
+  // the practice page restores the last coding persona. Runs on navigation
+  // and on fresh sessions (sessionEpoch), guarded to avoid redundant sends.
+  const lastCodingPersonaRef = useRef<Persona>('interviewer');
+  useEffect(() => {
+    if (['interviewer', 'bloomberg', 'tutor'].includes(persona)) lastCodingPersonaRef.current = persona;
+  }, [persona]);
+  useEffect(() => {
+    if (!connected) return;
+    const coding = ['interviewer', 'bloomberg', 'tutor'].includes(personaRef.current);
+    const want =
+      route === 'design'
+        ? 'sysdesign'
+        : route === 'behavioral'
+          ? 'behavioral'
+          : route === 'practice' && !coding
+            ? lastCodingPersonaRef.current
+            : null;
+    if (want && personaRef.current !== want) handlePersona(want);
+  }, [route, connected, sessionEpoch, handlePersona]);
+
+  // After a CV upload/removal over HTTP, tell the server so the persona
+  // context is rebuilt on the next turn.
+  const handleCvUpdated = useCallback(() => {
+    send({ type: 'cv:updated' });
+  }, [send]);
 
   const handleDesignPick = useCallback(
     (id?: string) => {
@@ -402,12 +430,12 @@ export default function App() {
     }
   }, []);
 
+  const inWorkspace = route === 'practice' || route === 'design' || route === 'behavioral';
+
   return (
     <div className="flex h-full flex-col">
-      <Toolbar
-        persona={persona}
-        language={language}
-        compiling={compiling}
+      <NavBar
+        route={route}
         connected={connected}
         startedAt={startedAt}
         paused={pauseState.paused}
@@ -417,65 +445,96 @@ export default function App() {
         voiceMode={voiceMode}
         narrationOn={narrationOn}
         narrationActive={narrationActive}
-        onPersona={handlePersona}
-        onLanguage={handleLanguage}
-        onRun={handleRun}
-        onEndSession={handleEndSession}
-        onResetSession={handleResetSession}
+        onNavigate={navigate}
+        onPause={handlePause}
         onVoiceMode={handleVoiceMode}
         onNarration={handleNarration}
-        onPause={handlePause}
-        onProgress={handleProgress}
+        onEndSession={handleEndSession}
+        onResetSession={handleResetSession}
       />
 
-      <div className="flex min-h-0 flex-1">
-        <div className="w-[22%] min-w-[260px] border-r border-neutral-800">
-          <ProblemPane
-            problem={problem}
-            loading={intakeLoading}
-            error={intakeError}
-            persona={persona}
-            designQuestion={designQuestion}
-            onIntake={handleIntake}
-            onDesignPick={handleDesignPick}
-          />
+      {route === 'home' && (
+        <div className="min-h-0 flex-1">
+          <HomePage onNavigate={navigate} />
         </div>
+      )}
+      {route === 'progress' && (
+        <div className="min-h-0 flex-1">
+          <ProgressView asPage />
+        </div>
+      )}
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="min-h-0 flex-[3]">
-            <Editor
-              language={language}
-              onState={handleEditorState}
-              onRun={handleRun}
-              onFocusChat={handleFocusChat}
-              onReady={handleEditorReady}
+      {/* The workspace stays MOUNTED across navigation — Monaco's buffer and
+          the live session must survive page switches — pages only toggle
+          visibility. Design mode hides the console (whiteboard); behavioral
+          hides editor+problem and centers the chat. */}
+      <div className={`min-h-0 flex-1 flex-col ${inWorkspace ? 'flex' : 'hidden'}`}>
+        <WorkspaceBar
+          route={inWorkspace ? route : 'practice'}
+          persona={persona}
+          language={language}
+          compiling={compiling}
+          onPersona={handlePersona}
+          onLanguage={handleLanguage}
+          onRun={handleRun}
+          onCvUpdated={handleCvUpdated}
+        />
+        <div className="flex min-h-0 flex-1">
+          <div
+            className={`w-[22%] min-w-[260px] border-r border-neutral-800 ${route === 'behavioral' ? 'hidden' : ''}`}
+          >
+            <ProblemPane
+              problem={problem}
+              loading={intakeLoading}
+              error={intakeError}
+              persona={persona}
+              designQuestion={designQuestion}
+              onIntake={handleIntake}
+              onDesignPick={handleDesignPick}
             />
           </div>
-          <div className="min-h-0 flex-1 border-t border-neutral-800">
-            <Console compiling={compiling} build={build} tests={tests} />
-          </div>
-        </div>
 
-        <div className="w-[28%] min-w-[300px] border-l border-neutral-800">
-          <ChatPane
-            turns={turns}
-            streamText={streamText}
-            busy={chatBusy}
-            error={chatError}
-            persona={persona}
-            narrationLive={narrationLive}
-            narrationError={narrationError}
-            inputRef={chatInputRef}
-            onSend={handleChatSend}
-            onBargeIn={handleBargeIn}
-          />
+          <div className={`min-w-0 flex-1 flex-col ${route === 'behavioral' ? 'hidden' : 'flex'}`}>
+            <div className="min-h-0 flex-[3]">
+              <Editor
+                language={language}
+                onState={handleEditorState}
+                onRun={handleRun}
+                onFocusChat={handleFocusChat}
+                onReady={handleEditorReady}
+              />
+            </div>
+            <div className={`min-h-0 flex-1 border-t border-neutral-800 ${route === 'design' ? 'hidden' : ''}`}>
+              <Console compiling={compiling} build={build} tests={tests} />
+            </div>
+          </div>
+
+          <div
+            className={
+              route === 'behavioral'
+                ? 'mx-auto w-full max-w-3xl'
+                : 'w-[28%] min-w-[300px] border-l border-neutral-800'
+            }
+          >
+            <ChatPane
+              turns={turns}
+              streamText={streamText}
+              busy={chatBusy}
+              error={chatError}
+              persona={persona}
+              narrationLive={narrationLive}
+              narrationError={narrationError}
+              inputRef={chatInputRef}
+              onSend={handleChatSend}
+              onBargeIn={handleBargeIn}
+            />
+          </div>
         </div>
       </div>
 
       {debrief && (
         <ScorecardView scorecard={debrief.scorecard} grade={debrief.grade} onClose={() => setDebrief(null)} />
       )}
-      {showProgress && <ProgressView onClose={() => setShowProgress(false)} />}
     </div>
   );
 }

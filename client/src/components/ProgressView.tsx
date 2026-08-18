@@ -18,7 +18,9 @@ const MODE_LABELS = {
 } as const;
 
 interface Props {
-  onClose: () => void;
+  // Modal mode when onClose is provided; full-page mode when asPage is set.
+  onClose?: () => void;
+  asPage?: boolean;
 }
 
 function fmtDate(ts: number): string {
@@ -182,7 +184,7 @@ const RANGES = [
 ] as const;
 type RangeKey = (typeof RANGES)[number]['key'];
 
-export default function ProgressView({ onClose }: Props) {
+export default function ProgressView({ onClose, asPage }: Props) {
   const [grades, setGrades] = useState<GradeRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>('all');
@@ -305,9 +307,15 @@ export default function ProgressView({ onClose }: Props) {
     return { latest, prev, drill, streak, hintLatest, hintPrev, clarLatest, avgDuration, avgGreen, greenCount: greens.length };
   }, [filtered, axisSeries]);
 
+  const shell = asPage
+    ? { outer: 'h-full overflow-y-auto', inner: 'mx-auto max-w-4xl px-6 py-8' }
+    : {
+        outer: 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6',
+        inner: 'max-h-full w-full max-w-3xl overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900 p-6',
+      };
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
-      <div className="max-h-full w-full max-w-3xl overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900 p-6">
+    <div className={shell.outer}>
+      <div className={shell.inner}>
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold text-neutral-100">Progress</h2>
@@ -336,9 +344,11 @@ export default function ProgressView({ onClose }: Props) {
             >
               {recapBusy ? 'Recapping…' : "Today's recap"}
             </button>
-            <button onClick={onClose} className="rounded bg-neutral-800 px-3 py-1 text-sm hover:bg-neutral-700">
-              Close
-            </button>
+            {onClose && (
+              <button onClick={onClose} className="rounded bg-neutral-800 px-3 py-1 text-sm hover:bg-neutral-700">
+                Close
+              </button>
+            )}
           </div>
         </div>
 
