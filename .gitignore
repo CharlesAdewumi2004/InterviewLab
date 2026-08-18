@@ -9,3 +9,6 @@ sessions/gradebook.db
 # Interview transcripts: local training data, never public
 interview-data/*
 !interview-data/README.md
+
+# Uploaded CV text: personal, never committed
+sessions/cv.txt

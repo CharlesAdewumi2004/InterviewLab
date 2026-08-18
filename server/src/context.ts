@@ -1,6 +1,7 @@
 import type { EditSummary, NarrationSegment, Session } from './types.js';
 import { activeMs } from './session.js';
 import { designBriefBlock, getDesignQuestion } from './sysdesign/bank.js';
+import { getCv } from './cv.js';
 import { INTERVIEWER_PROMPT } from './prompts/interviewer.js';
 import { TUTOR_PROMPT } from './prompts/tutor.js';
 import { BLOOMBERG_PROMPT } from './prompts/bloomberg.js';
@@ -57,6 +58,17 @@ export function buildSystemPrompt(session: Session): string {
   if (session.persona === 'sysdesign' && session.designQuestionId) {
     const q = getDesignQuestion(session.designQuestionId);
     if (q) blocks.push(designBriefBlock(q));
+  }
+
+  // Behavioral/Bloomberg: the uploaded CV, so the interviewer has actually
+  // read the resume — real behavioral rounds are grounded in it.
+  if (session.persona === 'behavioral' || session.persona === 'bloomberg') {
+    const cv = getCv();
+    if (cv) {
+      blocks.push(
+        `CANDIDATE CV (uploaded by the candidate; extracted text, verbatim — you read this before the interview):\n${cv}\n\nGround your questions in the CV: pick real projects, roles and claims from it, and cross-examine specifics — dates, team sizes, "led" vs "we", metrics, gaps, anything vague or inflated — exactly like an interviewer who did their prep. Where the CV conflicts with the standing candidate context above, the CV wins.`,
+      );
+    }
   }
 
   const p = session.problem;

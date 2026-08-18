@@ -15,6 +15,7 @@ import { ClangdSession } from './clangd.js';
 import { deleteGrade, listGrades, recordGrade } from './gradebook.js';
 import { dailyRecap } from './recap.js';
 import { getDesignQuestion, listDesignQuestions, randomDesignQuestion } from './sysdesign/bank.js';
+import { clearCv, cvStatus, setCv } from './cv.js';
 import { compileAndRun } from './runner.js';
 import { intakePrompt, INTAKE_SCHEMA } from './prompts/intake.js';
 import { SCORECARD_PROMPT, SCORECARD_SCHEMA } from './prompts/scorecard.js';
@@ -411,6 +412,11 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         store.setPaused(msg.paused);
         store.save();
         break;
+      case 'cv:updated':
+        // CV changed via HTTP — rebuild the runtime so the persona context
+        // (behavioral/bloomberg) picks up the new resume text.
+        resetChat();
+        break;
       case 'design:pick': {
         // Deliberately model-free: the bank has the exact spoken prompt, so
         // the interviewer "states" it as a canned turn — instant, and it works
@@ -491,6 +497,43 @@ fastify.get('/health', async () => ({ ok: true }));
 fastify.get('/api/progress', async () => ({ grades: listGrades() }));
 // System-design bank: client-safe metadata only (briefs never leave the server).
 fastify.get('/api/design-questions', async () => ({ questions: listDesignQuestions() }));
+
+// Candidate CV: uploaded as PDF (parsed server-side) or plain text, stored
+// locally in sessions/cv.txt (git-ignored), injected into the behavioral and
+// Bloomberg personas so the interviewer has "read the resume".
+fastify.addContentTypeParser('application/pdf', { parseAs: 'buffer' }, (_req, body, done) => done(null, body));
+fastify.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done) => done(null, body));
+fastify.get('/api/cv', async () => cvStatus());
+fastify.put('/api/cv', { bodyLimit: 10 * 1024 * 1024 }, async (request, reply) => {
+  try {
+    let text: string;
+    if (Buffer.isBuffer(request.body)) {
+      const { PDFParse } = await import('pdf-parse');
+      const parser = new PDFParse({ data: new Uint8Array(request.body) });
+      try {
+        const parsed = await parser.getText();
+        text = parsed.text;
+      } finally {
+        await parser.destroy().catch(() => {});
+      }
+    } else {
+      text = String(request.body ?? '');
+    }
+    if (!text.trim()) {
+      reply.code(400);
+      return { error: 'No readable text found — export the CV as a PDF with selectable text, or upload it as .txt/.md.' };
+    }
+    setCv(text);
+    return { ok: true, status: cvStatus() };
+  } catch (err) {
+    reply.code(500);
+    return { error: errorMessage(err) };
+  }
+});
+fastify.delete('/api/cv', async () => {
+  clearCv();
+  return { ok: true, status: cvStatus() };
+});
 // Gradebook row removal (the session JSON on disk is kept). The db is plain
 // SQLite at sessions/gradebook.db for anything beyond delete.
 fastify.delete('/api/progress/:sessionId', async (request, reply) => {
