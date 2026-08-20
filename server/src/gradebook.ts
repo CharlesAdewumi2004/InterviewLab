@@ -26,7 +26,10 @@ import type { Session } from './types.js';
 // per-axis calibration notes in the doc and scorecard prompt.
 // v4: §8 system-design delivery rubric — per-stage review + level signal for
 // design-bank sessions, stored alongside the axes.
-export const RUBRIC_VERSION = 4;
+// v5: §9 grader calibration from verified interviewer-training sources —
+// difficulty-dependent signal, anchor-at-3, structure-aware hint cost,
+// anti-leniency tiebreak, teaching-mode exclusion.
+export const RUBRIC_VERSION = 5;
 
 // §3 — per-mode axis weights.
 const WEIGHTS: Record<SessionMode, Partial<Record<AxisId, number>>> = {

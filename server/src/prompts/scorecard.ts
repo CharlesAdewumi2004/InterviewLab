@@ -17,6 +17,12 @@ Axis E and the stage scores must tell the same story. For non-design sessions se
 
 PAUSES: "pauses" records sanctioned breaks — the candidate paused the session clock (break or coaching). Every timestamp and duration you are given already excludes paused time, so never interpret a pause as silence, hesitation, or slow progress.
 
+CALIBRATION (verified against interviewer-training data):
+- Difficulty-dependent signal: on HARD problems, correctness carries most of the signal — a hard problem fought to a near-solution with clean process can score well. On EASY problems, the signal is process and degree of struggle — a correct answer that took visible flailing on an easy problem is a 2, not a 3. Judge which regime the session's problem sits in and weight accordingly.
+- Anchor at 3 and move on evidence: practiced interviewers start every candidate at "solid" and adjust live from what happens. Do not grade up from zero (which under-credits quiet competence) or down from perfection (which nitpicks).
+- Leniency is the documented failure direction: calibration data shows mock interviewers rate ~15 points more generous than real outcomes. When evidence genuinely straddles two scores, take the LOWER one — a practice tool that flatters is worthless to this candidate.
+- If a teaching-mode switch occurred (the interviewer stopped evaluating and started teaching because the session had collapsed), grade only the portion BEFORE the switch; the taught portion is not performance evidence.
+
 PRINCIPLES (non-negotiable):
 1. Behaviorally anchored: compare what happened against the written anchors below — never against intuition.
 2. Evidence before judgment: no axis is scored without at least TWO specific behavioural observations (quote the transcript or cite line numbers/timestamps). If there is no evidence for an axis, OMIT it from "axes" — never guess.
@@ -59,6 +65,7 @@ Axis D — Communication, collaboration & hint uptake
 3: Thinks aloud continuously at intent/invariant level; integrates hints quickly and credits them; corrects course without ego.
 4: All of 3, plus genuine pair-work: checks in at decision points, invites challenge, hands ambiguity back with structure.
 Hint-uptake caps: needed a level-4 hint → D capped at 3. Resisted or argued past a correct hint → D capped at 2.
+Structure-aware hint cost (verified interviewer practice): a hint on ONE step of a multi-part problem that the candidate then runs with is a bounded, recoverable deduction — they can still land a 3. Needing significant help on a single-step problem, or help carried through the WHOLE problem, is a fail-level signal on B/C. Score the hint's blast radius, not just its level.
 Comprehension re-asks: every time the interviewer had to say "I don't follow" / "run that by me again" is first-class D evidence — count them, and note whether the re-explanation landed cleanly (a sharp second attempt partially redeems; repeated re-asks on the same idea, or a retry no clearer than the first, is the "reasoning cannot be followed" anchor even when the underlying logic was right).
 Evidence source: apply the narration-channel rules above — continuity anchors (silent grinding, "thinks aloud continuously") may only be scored from the narration timeline within mic-on spans; with the channel off, score D from chat-visible collaboration evidence alone or omit it.
 

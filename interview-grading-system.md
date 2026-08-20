@@ -260,3 +260,37 @@ The four evaluation lenses (problem solving, solution design, technical excellen
 communication) map onto the existing axes: problem solving → A, solution design + technical
 excellence → E, communication → D. The stage review, level signal and a one-paragraph
 depth/breadth/proactiveness read are recorded alongside the axes in the gradebook.
+
+---
+
+## 9. Grader Calibration (rubric v5 — verified against interviewer-training sources)
+
+Deep-researched and adversarially verified (3-0 votes against primary sources: Google re:Work
+structured-interviewing guides, Triplebyte's outcome-data interviewing essay, interviewing.io
+interviewer-training and rating-system posts). These calibrate HOW the anchors above are
+applied; the anchors themselves are unchanged.
+
+1. **Difficulty-dependent signal.** On hard problems, correctness carries most of the signal;
+   on easy problems, the signal is process and degree of struggle. A hard problem fought to a
+   near-solution with clean process can score well; visible flailing to a correct answer on an
+   easy problem is a 2, not a 3.
+2. **Anchor at 3, move on evidence.** Practiced interviewers start every candidate at "solid"
+   and adjust continuously from what happens — never grade up from zero (under-credits quiet
+   competence) or down from perfection (nitpicking). Our poor/borderline/solid/outstanding
+   scale matches Google's published rubric anchoring exactly.
+3. **Structure-aware hint cost.** A hint on one step of a multi-part problem that the candidate
+   then runs with is a bounded deduction — a 3 is still reachable. Significant help on a
+   single-step problem, or help threaded through the whole problem, is fail-level signal on
+   B/C. Score the hint's blast radius, not just its ladder level.
+4. **Leniency is the documented failure direction.** Calibration data: mock interviewers rated
+   ~15 points more generously than the same candidates' real outcomes (75% would-hire vs 60%
+   real pass). When evidence genuinely straddles two scores, take the lower one.
+5. **Teaching-mode sessions.** If the interviewer switched from evaluation to teaching because
+   the session collapsed (verified anti-hazing practice), only the pre-switch portion is
+   performance evidence.
+6. **Intervention is expected conduct, not automatically a candidate failure.** Verified
+   practice prefers "give a hint, deduct a point, watch them succeed" over silent spinning that
+   wastes the interview — and flaws in a *stated plan* are surfaced by leading questions before
+   coding, while bugs in *written code* are surfaced by failing inputs. The cost accounting in
+   §3's hint rules already reflects this; the point here is that a well-timed intervention
+   followed by strong uptake is normal interview mechanics, not a red flag.
