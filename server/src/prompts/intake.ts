@@ -20,16 +20,22 @@ export const intakePrompt = (
   language: Language,
 ) => `You convert rough, pasted interview-problem text into a structured practice problem for a local practice IDE. ${ENVIRONMENTS[language].intro}
 
-SCENARIO FRAMING — the core transformation: real interviewers do not read out LeetCode statements; they dress the algorithm in a plausible work scenario. ("Invalid Transactions" becomes "we're seeing possible card fraud — two purchases by the same person in different cities within an hour"; "What Are My Friends Buying" wraps a hash/graph problem in a retail feature.) Re-dress the pasted problem the same way:
+SCENARIO FRAMING — first decide which of two cases the pasted problem is. Real interviewers dress bare algorithms in a work scenario, but they never pile fiction on top of a problem that already lives in the real world.
+
+CASE 1 — ALREADY GROUNDED: the pasted text already has a real-world setting. This includes design problems (an LRU cache, an underground-fare tracker, a rate limiter, "design a data structure that...") and any statement already about transactions, users, logs, prices, servers, tickets. KEEP ITS OWN SETTING. Do not invent a new product context, do not rename its entities, do not add backstory or a fictional team. Your only edits: phrase it the way an interviewer would say it out loud (terse, conversational), move constraints/examples into the private fields below, and — only if the canonical problem NAME leaks through the title or stub naming — retitle/rename just enough to hide the name while keeping the same setting. Extra scenario on an already-real problem is noise, not realism.
+
+CASE 2 — BARE ALGORITHM: the statement is abstract ("given an array of integers nums..."). Dress it:
 - Invent a concrete product/system context — a service, a feature, a dataset — and phrase the task as that team's actual need. Vary the domain across problems; finance/market-data flavours (orders, ticks, feeds, transactions, logs) fit this candidate's target but must not become a formula.
 - Rename everything into the scenario's vocabulary: the data is "per-minute prices" or "server request counts", never "an array of integers nums".
 - DISGUISE THE IDENTITY of well-known problems: the title, statement, stub naming and test phrasing must not let the candidate pattern-match the LeetCode name. Recognising the structure through the disguise is part of the exercise.
+
+BOTH CASES:
 - FIDELITY RULE: the underlying algorithmic task must stay exactly the pasted problem — same input shape, same required output, same optimal solution. The costume changes; the problem does not. Never add requirements that change what must be implemented.
-- If the pasted text already carries rich real-world context, keep its scenario and just clean it up.
+- PROPORTION: context is one or two sentences, never a paragraph of world-building. The framing exists to hide the pattern and force clarifying questions — anything beyond that is waste.
 
 Produce JSON with these fields:
 
-- title: the SCENARIO's name (e.g. "Flagging card fraud"), never the canonical algorithm-problem name.
+- title: a name in the problem's setting (Case 1: its own setting; Case 2: the invented scenario's, e.g. "Flagging card fraud") — never the canonical algorithm-problem name.
 - statement: the scenario the way an interviewer would SAY it — 2-4 conversational sentences: one or two of context, then the task. Deliberately omit input sizes, value ranges, edge-case enumeration and complexity targets: the candidate is scored on extracting those by asking. Do not include worked examples in the statement.
 - constraints: the interviewer's private answer key — NOT shown to the candidate. Every fact they might ask for, in the scenario's vocabulary: input size/range, value bounds, empty/null behaviour, duplicates, ordering, mutation, invalid input, expected complexity target. One fact per string, phrased as a direct answer.
 - examples: the interviewer's private pocket examples (input, output, note — empty string if no note), used only when the candidate asks for an example or needs an adversarial case. NOT shown to the candidate.
