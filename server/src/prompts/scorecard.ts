@@ -9,11 +9,19 @@ THE NARRATION CHANNEL: "narration" is the candidate's spoken think-aloud while c
 - Channel ON (meaningful coverage): the narration timeline is primary Axis D evidence. Judge think-aloud continuity and quality from it — intent/invariant-level narration is the bar, and repeated >30s gaps during active coding WITHIN a mic-on span are silent grinding. Exception: the mic yields while the interviewer's reply is being read aloud, so a narration gap that coincides with an assistant turn is the interviewer talking, never candidate silence.
 - Channel OFF (or negligible coverage): the candidate's speech was NOT captured. Never infer silence or silent grinding from gaps — absence of narration is absence of evidence, not evidence of silence. Grade D only on what is observable in chat (hint uptake, integration of interviewer input, written check-ins); if that yields fewer than two specific observations, OMIT D entirely (Not Observed).
 
+TECH-KNOWLEDGE SESSIONS: when the payload contains "tech_round" (the sampled questions with their answer keys and follow-up ladders), this was a technical-knowledge round. Score C as knowledge depth & correctness (1 = wrong/bluffed fundamentals; 2 = surface definitions that collapse under the first follow-up; 3 = correct and survives the ladder on most questions; 4 = mechanism-level depth beyond the ladder, connects topics unprompted), D as explanation quality, and B ONLY if code was actually written (escalations or debug fixes). In ADDITION, produce "knowledge_review":
+- items: one entry per bank question the interviewer ACTUALLY asked (skip unasked ones): verdict nailed (covered the key facts, survived follow-ups) / partial (core right but follow-ups exposed gaps, or needed leading) / missed (wrong, bluffed, or "don't know" on a depth-1 fundamental). Grade against the question's answer_key, NOT your own recall. An honest "I don't know, here's how I'd reason" on a hard question is a respectable partial — bluffing is the red-flag behaviour, not ignorance.
+- strongest/weakest: TOPIC-level reads (the recap steers drills by topic).
+- debug: when the payload contains "debug_exercise", grade the find phase against planted_issues — issuesFound / issuesMissed (say which; category and severity matter — a missed high-severity UB issue outweighs a style nit), falsePositives (issues confidently claimed that aren't real; two or more is C evidence), fixOutcome (from the run history and final tests: fixed? regressions?), perfGatePassed (did the timed perf case pass by session end — from the final test state; null if they never ran). Reading unfamiliar code aloud coherently is D evidence. Set debug to null when no exercise ran.
+For non-tech-knowledge sessions set knowledge_review to null.
+
+OOP-DESIGN SESSIONS: when the payload contains an "oop_question" (with ground_truth), this was an OOP/low-level design round (talk-then-code). Score E as object-oriented design quality (1 = god object / no abstraction; 2 = plausible classes but wrong responsibilities or inheritance-where-composition; 3 = clean responsibilities, deliberate interfaces, patterns applied where they earn their keep; 4 = all of 3 plus the design survives the extension asks with local change, trade-offs argued, SOLID violations self-caught), A for requirements extraction, B for the skeleton implementation (strong-C++ bar: RAII, ownership readable from the types, rule of zero, const-correctness — omit B if the round never reached code), D for communication. In ADDITION produce "design_review" with OOP stages: requirements (scope extracted by asking, out-of-scope stated), entities (core classes + one-line responsibilities, composition preferred), interfaces (deliberate signatures, invariants owned by the class that can protect them), patterns (applied where they earn their keep and named honestly — name-dropping without need is a negative; did the design survive the extension asks with local change?), implementation (skeleton compiles and matches the discussed design). Judge against the oop_question's ground_truth. level_signal and dimensions carry over with the same meaning as system design.
+
 SYSTEM-DESIGN SESSIONS: when the payload contains a "design_question" (with ground_truth), this was a system-design round. In ADDITION to the axes (E for the design itself, A for requirements work, D for communication), produce "design_review":
 - stages: score each delivery-framework stage 1-4 with evidence — requirements (top-3 functional as "users can..." statements, long lists are a NEGATIVE; quantified non-functional; no ritual capacity math), entities (quick nouns), api (REST-lenient: reasonable beats perfect, but time overrun is the failure), high_level (a simple COMPLETE end-to-end design before complexity — failing to deliver a working whole is the biggest failure in the round), deep_dives (depth in ~2 areas; capacity math exactly where a number changes a decision). Judge against the question's ground_truth: its requirements answer key, expected design, canonical deep dives and common mistakes. Omit a stage from the array only if the session ended before reaching it.
 - level_signal: below mid-level (no working end-to-end design even with steering) · mid-level (drove early stages to a working whole; needed the interviewer to point at deep-dive areas) · senior (proactively led ~2 deep dives with mechanism-level detail, never "I'll just use NoSQL") · staff+ (led the whole round as a peer, surfaced the hardest corners unprompted). Grade against the ground_truth's own per-level bars.
 - dimensions: one paragraph on depth, breadth and proactiveness (breadth expectations DECREASE with seniority; depth and proactiveness increase).
-Axis E and the stage scores must tell the same story. For non-design sessions set design_review to null.
+Axis E and the stage scores must tell the same story. For sessions that are neither system-design nor OOP-design, set design_review to null.
 
 PAUSES: "pauses" records sanctioned breaks — the candidate paused the session clock (break or coaching). Every timestamp and duration you are given already excludes paused time, so never interpret a pause as silence, hesitation, or slow progress.
 
@@ -191,7 +199,19 @@ export const SCORECARD_SCHEMA = {
               items: {
                 type: 'object',
                 properties: {
-                  stage: { type: 'string', enum: ['requirements', 'entities', 'api', 'high_level', 'deep_dives'] },
+                  stage: {
+                    type: 'string',
+                    enum: [
+                      'requirements',
+                      'entities',
+                      'api',
+                      'high_level',
+                      'deep_dives',
+                      'interfaces',
+                      'patterns',
+                      'implementation',
+                    ],
+                  },
                   score: { type: 'number', minimum: 1, maximum: 4 },
                   evidence: { type: 'string' },
                 },
@@ -203,6 +223,54 @@ export const SCORECARD_SCHEMA = {
             dimensions: { type: 'string' },
           },
           required: ['stages', 'level_signal', 'dimensions'],
+          additionalProperties: false,
+        },
+        { type: 'null' },
+      ],
+    },
+    knowledge_review: {
+      anyOf: [
+        {
+          type: 'object',
+          properties: {
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  question: { type: 'string' },
+                  topic: {
+                    type: 'string',
+                    enum: ['os', 'networking', 'cpp', 'memory', 'lowlevel', 'concurrency', 'dsinternals', 'data'],
+                  },
+                  verdict: { type: 'string', enum: ['nailed', 'partial', 'missed'] },
+                  note: { type: 'string' },
+                },
+                required: ['question', 'topic', 'verdict', 'note'],
+                additionalProperties: false,
+              },
+            },
+            strongest: { type: 'string' },
+            weakest: { type: 'string' },
+            debug: {
+              anyOf: [
+                {
+                  type: 'object',
+                  properties: {
+                    issuesFound: { type: 'array', items: { type: 'string' } },
+                    issuesMissed: { type: 'array', items: { type: 'string' } },
+                    falsePositives: { type: 'array', items: { type: 'string' } },
+                    fixOutcome: { type: 'string' },
+                    perfGatePassed: { anyOf: [{ type: 'boolean' }, { type: 'null' }] },
+                  },
+                  required: ['issuesFound', 'issuesMissed', 'falsePositives', 'fixOutcome', 'perfGatePassed'],
+                  additionalProperties: false,
+                },
+                { type: 'null' },
+              ],
+            },
+          },
+          required: ['items', 'strongest', 'weakest', 'debug'],
           additionalProperties: false,
         },
         { type: 'null' },
@@ -223,6 +291,7 @@ export const SCORECARD_SCHEMA = {
     'confidence',
     'decision_observation',
     'design_review',
+    'knowledge_review',
   ],
   additionalProperties: false,
 } as const;

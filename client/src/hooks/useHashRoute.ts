@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 
 // Hash routing on purpose: the Fastify static server has no SPA fallback, so
 // history-API routes would 404 on refresh — #/routes never hit the server.
-export type Route = 'home' | 'practice' | 'design' | 'behavioral' | 'progress';
+export type Route = 'home' | 'practice' | 'design' | 'oop' | 'tech' | 'behavioral' | 'progress';
 
-const ROUTES: Route[] = ['home', 'practice', 'design', 'behavioral', 'progress'];
+const ROUTES: Route[] = ['home', 'practice', 'design', 'oop', 'tech', 'behavioral', 'progress'];
 
 function parse(): Route {
   const h = window.location.hash.replace(/^#\/?/, '').split('?')[0];

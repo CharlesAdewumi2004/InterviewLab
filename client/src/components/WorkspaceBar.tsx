@@ -139,6 +139,60 @@ export default memo(function WorkspaceBar(props: Props) {
       </div>
     );
   }
+  if (props.route === 'oop') {
+    return (
+      <div className="flex items-center gap-3 border-b border-neutral-800 bg-neutral-900/60 px-3 py-1.5">
+        <span className="text-xs font-medium text-neutral-300">OOP design round</span>
+        <span className="text-[11px] text-neutral-600">
+          talk first — scope, classes, interfaces, patterns — then implement the skeleton in the editor
+        </span>
+        <div className="flex-1" />
+        <Segmented
+          value={props.language}
+          options={[
+            { value: 'cpp', label: 'C++' },
+            { value: 'python', label: 'Py' },
+          ]}
+          onChange={props.onLanguage}
+        />
+        <button
+          onClick={props.onRun}
+          disabled={props.compiling}
+          className="rounded-md bg-green-700 px-3 py-1 text-xs font-medium text-white hover:bg-green-600 disabled:opacity-40"
+          title="Compile the skeleton (Ctrl/Cmd+Enter)"
+        >
+          {props.compiling ? 'Compiling…' : '▶ Run'}
+        </button>
+      </div>
+    );
+  }
+  if (props.route === 'tech') {
+    return (
+      <div className="flex items-center gap-3 border-b border-neutral-800 bg-neutral-900/60 px-3 py-1.5">
+        <span className="text-xs font-medium text-neutral-300">Tech knowledge round</span>
+        <span className="text-[11px] text-neutral-600">
+          verbal fundamentals with drill-down follow-ups — the editor comes in for escalations and debug exercises
+        </span>
+        <div className="flex-1" />
+        <Segmented
+          value={props.language}
+          options={[
+            { value: 'cpp', label: 'C++' },
+            { value: 'python', label: 'Py' },
+          ]}
+          onChange={props.onLanguage}
+        />
+        <button
+          onClick={props.onRun}
+          disabled={props.compiling}
+          className="rounded-md bg-green-700 px-3 py-1 text-xs font-medium text-white hover:bg-green-600 disabled:opacity-40"
+          title="Ctrl/Cmd+Enter"
+        >
+          {props.compiling ? 'Compiling…' : '▶ Run'}
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center gap-3 border-b border-neutral-800 bg-neutral-900/60 px-3 py-1.5">
       <Segmented

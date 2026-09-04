@@ -1,12 +1,16 @@
 import type { EditSummary, NarrationSegment, Session } from './types.js';
 import { activeMs } from './session.js';
 import { designBriefBlock, getDesignQuestion } from './sysdesign/bank.js';
+import { getTechQuestion, techRoundBlock } from './techq/bank.js';
+import { oopBriefBlock, getOopQuestion } from './oop/bank.js';
 import { getCv } from './cv.js';
 import { INTERVIEWER_PROMPT } from './prompts/interviewer.js';
 import { TUTOR_PROMPT } from './prompts/tutor.js';
 import { BLOOMBERG_PROMPT } from './prompts/bloomberg.js';
 import { SYSDESIGN_PROMPT } from './prompts/sysdesign.js';
 import { BEHAVIORAL_PROMPT } from './prompts/behavioral.js';
+import { TECHQ_PROMPT } from './prompts/techq.js';
+import { OOP_PROMPT } from './prompts/oop.js';
 
 // §6 — code is state, not history. With a persistent chat session the model's
 // transcript accumulates turns we can't strip, so: the buffer is re-sent ONLY
@@ -44,6 +48,8 @@ export function buildSystemPrompt(session: Session): string {
     behavioral: BEHAVIORAL_PROMPT,
     bloomberg: BLOOMBERG_PROMPT,
     tutor: TUTOR_PROMPT,
+    techq: TECHQ_PROMPT,
+    oopdesign: OOP_PROMPT,
   }[session.persona];
   blocks.push(personaPrompt);
 
@@ -58,6 +64,22 @@ export function buildSystemPrompt(session: Session): string {
   if (session.persona === 'sysdesign' && session.designQuestionId) {
     const q = getDesignQuestion(session.designQuestionId);
     if (q) blocks.push(designBriefBlock(q));
+  }
+
+  // Tech-knowledge round: the sampled question set (answer keys + follow-up
+  // ladders) is the interviewer's private ground truth.
+  if (session.persona === 'techq' && session.techQuestionIds?.length) {
+    const qs = session.techQuestionIds
+      .map((id) => getTechQuestion(id))
+      .filter((q): q is NonNullable<typeof q> => q !== undefined);
+    if (qs.length) blocks.push(techRoundBlock(qs));
+  }
+
+  // OOP design round with a bank question active: mirror of the sysdesign
+  // injection.
+  if (session.persona === 'oopdesign' && session.oopQuestionId) {
+    const q = getOopQuestion(session.oopQuestionId);
+    if (q) blocks.push(oopBriefBlock(q));
   }
 
   // Behavioral/Bloomberg: the uploaded CV, so the interviewer has actually

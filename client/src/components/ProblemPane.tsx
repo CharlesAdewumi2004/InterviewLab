@@ -1,5 +1,7 @@
 import { memo, useEffect, useState } from 'react';
-import type { ClientProblem, DesignMeta, Persona } from '../../../shared/protocol';
+import type { ClientProblem, DesignMeta, OopMeta, Persona, TechTopic } from '../../../shared/protocol';
+import TechQPane from './TechQPane';
+import OopBank from './OopBank';
 
 interface Props {
   problem: ClientProblem | null;
@@ -7,8 +9,13 @@ interface Props {
   error: string | null;
   persona: Persona;
   designQuestion: DesignMeta | null;
-  onIntake: (raw: string, delivery: 'text' | 'oral') => void;
+  techTopics: TechTopic[] | null;
+  oopQuestion: OopMeta | null;
+  onIntake: (raw: string, delivery: 'text' | 'oral', framing: 'scenario' | 'plain') => void;
   onDesignPick: (id?: string) => void;
+  onTechStart: (topics: TechTopic[]) => void;
+  onDebugPick: (id?: string) => void;
+  onOopPick: (id?: string) => void;
 }
 
 const DIFF_COLORS: Record<DesignMeta['difficulty'], string> = {
@@ -123,9 +130,23 @@ interface CodingSuggestion {
   seed: string;
 }
 
-export default memo(function ProblemPane({ problem, loading, error, persona, designQuestion, onIntake, onDesignPick }: Props) {
+export default memo(function ProblemPane({
+  problem,
+  loading,
+  error,
+  persona,
+  designQuestion,
+  techTopics,
+  oopQuestion,
+  onIntake,
+  onDesignPick,
+  onTechStart,
+  onDebugPick,
+  onOopPick,
+}: Props) {
   const [raw, setRaw] = useState('');
   const [delivery, setDelivery] = useState<'text' | 'oral'>('text');
+  const [framing, setFraming] = useState<'scenario' | 'plain'>('scenario');
   const [showIntake, setShowIntake] = useState(false);
   // Frequency-grounded suggestions (Bloomberg tier-1 / grad top-40) — the
   // pick fills the intake box; Format then disguises it as a scenario.
@@ -159,6 +180,12 @@ export default memo(function ProblemPane({ problem, loading, error, persona, des
 
   if (persona === 'sysdesign') {
     return <DesignBank designQuestion={designQuestion} onDesignPick={onDesignPick} />;
+  }
+  if (persona === 'oopdesign') {
+    return <OopBank oopQuestion={oopQuestion} onOopPick={onOopPick} />;
+  }
+  if (persona === 'techq') {
+    return <TechQPane techTopics={techTopics} problem={problem} onTechStart={onTechStart} onDebugPick={onDebugPick} />;
   }
 
   if (!problem || showIntake) {
@@ -227,9 +254,33 @@ export default memo(function ProblemPane({ problem, loading, error, persona, des
             Oral only
           </button>
         </div>
+        <div className="flex overflow-hidden rounded border border-neutral-700 text-xs">
+          <button
+            onClick={() => setFraming('scenario')}
+            title="Bare algorithms get dressed as a realistic work scenario (disguised identity); problems that already have real-world context keep their own setting"
+            className={
+              framing === 'scenario'
+                ? 'flex-1 bg-blue-700 px-2 py-1 font-medium text-white'
+                : 'flex-1 bg-neutral-900 px-2 py-1 text-neutral-400 hover:bg-neutral-800'
+            }
+          >
+            Scenario
+          </button>
+          <button
+            onClick={() => setFraming('plain')}
+            title="No invented context at all — the problem delivered straight, just phrased the way an interviewer would say it. Constraints still stay hidden until you ask."
+            className={
+              framing === 'plain'
+                ? 'flex-1 bg-blue-700 px-2 py-1 font-medium text-white'
+                : 'flex-1 bg-neutral-900 px-2 py-1 text-neutral-400 hover:bg-neutral-800'
+            }
+          >
+            Plain
+          </button>
+        </div>
         <div className="flex gap-2">
           <button
-            onClick={() => raw.trim() && onIntake(raw.trim(), delivery)}
+            onClick={() => raw.trim() && onIntake(raw.trim(), delivery, framing)}
             disabled={loading || !raw.trim()}
             className="rounded bg-blue-700 px-3 py-1.5 text-sm font-medium hover:bg-blue-600 disabled:opacity-40"
           >

@@ -26,6 +26,8 @@ const NAV: { route: Route; label: string }[] = [
   { route: 'home', label: 'Dashboard' },
   { route: 'practice', label: 'Practice' },
   { route: 'design', label: 'Sys Design' },
+  { route: 'oop', label: 'OOP Design' },
+  { route: 'tech', label: 'Tech Knowledge' },
   { route: 'behavioral', label: 'Behavioral' },
   { route: 'progress', label: 'Progress' },
 ];

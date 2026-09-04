@@ -6,9 +6,11 @@ import type {
   DesignMeta,
   GradeSummary,
   Language,
+  OopMeta,
   Persona,
   Scorecard,
   ServerMessage,
+  TechTopic,
   TestsResult,
   Turn,
 } from '../../shared/protocol';
@@ -33,6 +35,8 @@ export default function App() {
   const [language, setLanguage] = useState<Language>('cpp');
   const [problem, setProblem] = useState<ClientProblem | null>(null);
   const [designQuestion, setDesignQuestion] = useState<DesignMeta | null>(null);
+  const [techTopics, setTechTopics] = useState<TechTopic[] | null>(null);
+  const [oopQuestion, setOopQuestion] = useState<OopMeta | null>(null);
   const [intakeLoading, setIntakeLoading] = useState(false);
   const [intakeError, setIntakeError] = useState<string | null>(null);
 
@@ -97,6 +101,8 @@ export default function App() {
         setPersona(msg.persona);
         setLanguage(msg.language);
         setDesignQuestion(msg.designQuestion);
+        setTechTopics(msg.techTopics);
+        setOopQuestion(msg.oopQuestion);
         setTurns(msg.turns);
         setProblem(msg.problem);
         setStreamText(null);
@@ -129,6 +135,14 @@ export default function App() {
         setDesignQuestion(msg.question);
         // The interviewer's canned statement streams next as chat:delta —
         // prime the speaker so voice mode reads it aloud.
+        if (voiceModeRef.current) speakerRef.current.beginReply();
+        break;
+      case 'techq:ready':
+        setTechTopics(msg.topics);
+        if (voiceModeRef.current) speakerRef.current.beginReply();
+        break;
+      case 'oop:ready':
+        setOopQuestion(msg.question);
         if (voiceModeRef.current) speakerRef.current.beginReply();
         break;
       case 'problem:ready':
@@ -346,13 +360,40 @@ export default function App() {
   );
 
   const handleIntake = useCallback(
-    (raw: string, delivery: 'text' | 'oral') => {
-      if (!send({ type: 'problem:intake', raw, delivery, voice: voiceModeRef.current })) {
+    (raw: string, delivery: 'text' | 'oral', framing: 'scenario' | 'plain') => {
+      if (!send({ type: 'problem:intake', raw, delivery, framing, voice: voiceModeRef.current })) {
         setIntakeError('Not connected — reconnecting. Try again in a moment.');
         return;
       }
       setIntakeLoading(true);
       setIntakeError(null);
+    },
+    [send],
+  );
+
+  const handleTechStart = useCallback(
+    (topics: TechTopic[]) => {
+      if (!send({ type: 'techq:start', topics })) {
+        setChatError('Not connected — reconnecting. Try starting again in a moment.');
+      }
+    },
+    [send],
+  );
+
+  const handleDebugPick = useCallback(
+    (id?: string) => {
+      if (!send({ type: 'debug:pick', id })) {
+        setChatError('Not connected — reconnecting. Try picking again in a moment.');
+      }
+    },
+    [send],
+  );
+
+  const handleOopPick = useCallback(
+    (id?: string) => {
+      if (!send({ type: 'oop:pick', id })) {
+        setChatError('Not connected — reconnecting. Try picking again in a moment.');
+      }
     },
     [send],
   );
@@ -392,11 +433,15 @@ export default function App() {
     const want =
       route === 'design'
         ? 'sysdesign'
-        : route === 'behavioral'
-          ? 'behavioral'
-          : route === 'practice' && !coding
-            ? lastCodingPersonaRef.current
-            : null;
+        : route === 'oop'
+          ? 'oopdesign'
+          : route === 'tech'
+            ? 'techq'
+            : route === 'behavioral'
+              ? 'behavioral'
+              : route === 'practice' && !coding
+                ? lastCodingPersonaRef.current
+                : null;
     if (want && personaRef.current !== want) handlePersona(want);
   }, [route, connected, sessionEpoch, handlePersona]);
 
@@ -430,7 +475,8 @@ export default function App() {
     }
   }, []);
 
-  const inWorkspace = route === 'practice' || route === 'design' || route === 'behavioral';
+  const inWorkspace =
+    route === 'practice' || route === 'design' || route === 'oop' || route === 'tech' || route === 'behavioral';
 
   return (
     <div className="flex h-full flex-col">
@@ -489,8 +535,13 @@ export default function App() {
               error={intakeError}
               persona={persona}
               designQuestion={designQuestion}
+              techTopics={techTopics}
+              oopQuestion={oopQuestion}
               onIntake={handleIntake}
               onDesignPick={handleDesignPick}
+              onTechStart={handleTechStart}
+              onDebugPick={handleDebugPick}
+              onOopPick={handleOopPick}
             />
           </div>
 

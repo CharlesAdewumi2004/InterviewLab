@@ -85,6 +85,9 @@ export default function ScorecardView({ scorecard, grade, onClose }: Props) {
                           api: 'API',
                           high_level: 'High-level',
                           deep_dives: 'Deep dives',
+                          interfaces: 'Interfaces',
+                          patterns: 'Patterns',
+                          implementation: 'Impl',
                         }[s.stage]
                       }
                     </div>
@@ -97,6 +100,76 @@ export default function ScorecardView({ scorecard, grade, onClose }: Props) {
               <span className="font-semibold text-neutral-300">Depth · breadth · proactiveness: </span>
               {scorecard.design_review.dimensions}
             </p>
+          </section>
+        )}
+
+        {scorecard.knowledge_review && (
+          <section className="mb-4">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              Knowledge review (§10)
+            </h3>
+            <div className="mb-2 space-y-1.5">
+              {scorecard.knowledge_review.items.map((item, i) => (
+                <div key={i} className="flex items-start gap-3 rounded bg-neutral-800/70 p-2">
+                  <span
+                    className={`w-16 shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-semibold uppercase ${
+                      item.verdict === 'nailed'
+                        ? 'bg-green-900/60 text-green-300'
+                        : item.verdict === 'partial'
+                          ? 'bg-yellow-900/60 text-yellow-300'
+                          : 'bg-red-900/60 text-red-300'
+                    }`}
+                  >
+                    {item.verdict}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium text-neutral-200">{item.question}</div>
+                    <div className="text-xs text-neutral-400">{item.note}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-neutral-400">
+              <span className="font-semibold text-green-300">Strongest:</span> {scorecard.knowledge_review.strongest}
+              <span className="ml-3 font-semibold text-red-300">Weakest:</span> {scorecard.knowledge_review.weakest}
+            </p>
+            {scorecard.knowledge_review.debug && (
+              <div className="mt-2 rounded bg-neutral-800/70 p-2 text-xs text-neutral-400">
+                <div className="mb-1 font-semibold text-neutral-300">
+                  Debug exercise
+                  {scorecard.knowledge_review.debug.perfGatePassed !== null && (
+                    <span
+                      className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${
+                        scorecard.knowledge_review.debug.perfGatePassed
+                          ? 'bg-green-900/60 text-green-300'
+                          : 'bg-red-900/60 text-red-300'
+                      }`}
+                    >
+                      perf gate {scorecard.knowledge_review.debug.perfGatePassed ? 'passed' : 'failed'}
+                    </span>
+                  )}
+                </div>
+                {scorecard.knowledge_review.debug.issuesFound.length > 0 && (
+                  <p>
+                    <span className="text-green-300">Found:</span>{' '}
+                    {scorecard.knowledge_review.debug.issuesFound.join(' · ')}
+                  </p>
+                )}
+                {scorecard.knowledge_review.debug.issuesMissed.length > 0 && (
+                  <p>
+                    <span className="text-red-300">Missed:</span>{' '}
+                    {scorecard.knowledge_review.debug.issuesMissed.join(' · ')}
+                  </p>
+                )}
+                {scorecard.knowledge_review.debug.falsePositives.length > 0 && (
+                  <p>
+                    <span className="text-yellow-300">False positives:</span>{' '}
+                    {scorecard.knowledge_review.debug.falsePositives.join(' · ')}
+                  </p>
+                )}
+                <p className="mt-1">{scorecard.knowledge_review.debug.fixOutcome}</p>
+              </div>
+            )}
           </section>
         )}
 

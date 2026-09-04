@@ -2,7 +2,20 @@
 
 // interviewer = technical coding round; sysdesign and behavioral are
 // dedicated round types (each grades into its own §3 mode via axes E/F).
-export type Persona = 'interviewer' | 'sysdesign' | 'behavioral' | 'tutor' | 'bloomberg';
+// techq = technical-knowledge drills (verbal + escalations + debug exercises);
+// oopdesign = low-level OOP design, talk-then-code.
+export type Persona = 'interviewer' | 'sysdesign' | 'behavioral' | 'tutor' | 'bloomberg' | 'techq' | 'oopdesign';
+
+// Topic chips for the tech-knowledge round — mirror the bank's topic keys.
+export type TechTopic =
+  | 'os'
+  | 'networking'
+  | 'cpp'
+  | 'memory'
+  | 'lowlevel'
+  | 'concurrency'
+  | 'dsinternals'
+  | 'data';
 
 export type Language = 'cpp' | 'python';
 
@@ -36,6 +49,10 @@ export interface ClientProblem {
   // chat/voice instead — title and statement arrive blanked, and listening +
   // asking for repeats is part of the exercise.
   oral: boolean;
+  // Debug-&-optimize exercise: the editor was seeded with deliberately flawed
+  // code — find the issues by reading, then fix and optimize until the tests
+  // (including the timed perf case) pass.
+  debug?: boolean;
 }
 
 export interface BuildResult {
@@ -112,11 +129,35 @@ export interface Scorecard {
   next_drill: string;
   confidence: 'low' | 'medium' | 'high';
   decision_observation: string;
-  // Present only for system-design sessions (a bank question was active).
+  // Present only for system-design and OOP-design sessions (a bank question
+  // was active) — OOP rounds reuse the staged review with OOP stages.
   design_review: DesignReview | null;
+  // Present only for tech-knowledge sessions (§10.1).
+  knowledge_review: KnowledgeReview | null;
 }
 
-export type SessionMode = 'coding' | 'full_interview' | 'system_design' | 'behavioral';
+// §10.1 — per-question review of a tech-knowledge round, graded against each
+// bank question's private answer key. Null for every other round type.
+export interface KnowledgeReview {
+  items: {
+    question: string; // as asked
+    topic: TechTopic;
+    verdict: 'nailed' | 'partial' | 'missed';
+    note: string; // what the follow-ups exposed
+  }[];
+  strongest: string; // topic-level read, steers drills
+  weakest: string;
+  // Only when a debug-&-optimize exercise ran: recall vs the planted issues.
+  debug: {
+    issuesFound: string[];
+    issuesMissed: string[];
+    falsePositives: string[];
+    fixOutcome: string;
+    perfGatePassed: boolean | null;
+  } | null;
+}
+
+export type SessionMode = 'coding' | 'full_interview' | 'system_design' | 'behavioral' | 'tech_knowledge' | 'oop_design';
 export type Recommendation = 'strong hire' | 'hire' | 'lean no hire' | 'no hire';
 
 // Server-computed decision + measured telemetry (§5 + §7 inputs).
@@ -151,6 +192,7 @@ export interface GradeRecord extends GradeSummary {
   problemTitle: string | null;
   axes: ScorecardAxis[];
   designReview: DesignReview | null;
+  knowledgeReview: KnowledgeReview | null;
 }
 
 // System-design question bank (HelloInterview-style): client-safe metadata
@@ -168,7 +210,17 @@ export interface DesignMeta {
 // non-design sessions.
 export interface DesignReview {
   stages: {
-    stage: 'requirements' | 'entities' | 'api' | 'high_level' | 'deep_dives';
+    // System-design rounds use requirements/entities/api/high_level/deep_dives;
+    // OOP rounds use requirements/entities/interfaces/patterns/implementation.
+    stage:
+      | 'requirements'
+      | 'entities'
+      | 'api'
+      | 'high_level'
+      | 'deep_dives'
+      | 'interfaces'
+      | 'patterns'
+      | 'implementation';
     score: number; // 1-4, same scale as axes
     evidence: string;
   }[];
@@ -188,11 +240,24 @@ export interface DailyRecap {
   drills: string[]; // concrete exercises for tomorrow
 }
 
+// System-design bank metadata is DesignMeta; the OOP bank's client-safe shape
+// differs slightly (asks is a one-line "what's being designed", not companies).
+export interface OopMeta {
+  id: string;
+  title: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  asks: string;
+  patterns: string[];
+}
+
 export type ClientMessage =
   // delivery 'oral' = the interviewer speaks the problem (pane text hidden);
   // 'text' (default) = statement shown in the pane as well. `voice` mirrors
   // chat:send: when on, the oral statement is styled for text-to-speech.
-  | { type: 'problem:intake'; raw: string; delivery?: 'text' | 'oral'; voice?: boolean }
+  // framing 'plain' = no invented scenario at all: the problem delivered
+  // straight (still interviewer-voiced, constraints still private);
+  // 'scenario' (default) = bare algorithms get dressed, grounded ones kept.
+  | { type: 'problem:intake'; raw: string; delivery?: 'text' | 'oral'; voice?: boolean; framing?: 'scenario' | 'plain' }
   | { type: 'editor:state'; buffer: string; selection: Selection | null; cursor: Cursor }
   // chat:send and run carry the buffer so the backend never acts on a stale
   // debounced copy — the payload is authoritative at that instant.
@@ -221,6 +286,18 @@ export type ClientMessage =
   // The interviewer states the prompt in chat; the private brief becomes its
   // ground truth. Only meaningful with the sysdesign persona.
   | { type: 'design:pick'; id?: string }
+  // Start a tech-knowledge round over the chosen topic chips: the server
+  // samples a question set from the bank (private answer keys + follow-up
+  // ladders become the interviewer's ground truth) and the interviewer opens
+  // with the first question. Only meaningful with the techq persona.
+  | { type: 'techq:start'; topics: TechTopic[] }
+  // Pick a debug-&-optimize exercise (random when id omitted, filtered to the
+  // session language): flawed code is seeded into the editor as a problem
+  // whose planted-issue key stays server-side. techq persona.
+  | { type: 'debug:pick'; id?: string }
+  // Pick an OOP design question — mirrors design:pick for the oopdesign
+  // persona (canned prompt turn; private brief becomes ground truth).
+  | { type: 'oop:pick'; id?: string }
   // The CV changed via HTTP upload (PUT/DELETE /api/cv) — rebuild the chat
   // runtime so the persona's context picks it up.
   | { type: 'cv:updated' }
@@ -251,8 +328,12 @@ export type ServerMessage =
       pausedMs: number;
       pausedAt: number | null;
       designQuestion: DesignMeta | null;
+      techTopics: TechTopic[] | null;
+      oopQuestion: OopMeta | null;
     }
   | { type: 'design:ready'; question: DesignMeta }
+  | { type: 'techq:ready'; topics: TechTopic[] }
+  | { type: 'oop:ready'; question: OopMeta }
   | { type: 'problem:ready'; problem: ClientProblem; buffer: string }
   | { type: 'problem:error'; message: string }
   | { type: 'chat:delta'; text: string }

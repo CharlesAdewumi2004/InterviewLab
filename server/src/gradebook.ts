@@ -6,6 +6,7 @@ import type {
   DesignReview,
   GradeRecord,
   GradeSummary,
+  KnowledgeReview,
   Persona,
   Recommendation,
   Scorecard,
@@ -29,7 +30,10 @@ import type { Session } from './types.js';
 // v5: §9 grader calibration from verified interviewer-training sources —
 // difficulty-dependent signal, anchor-at-3, structure-aware hint cost,
 // anti-leniency tiebreak, teaching-mode exclusion.
-export const RUBRIC_VERSION = 5;
+// v6: §10 tech-knowledge and OOP-design rounds — persona-set modes with their
+// own weights, knowledge_review (per-question verdicts vs answer keys, debug
+// planted-issue recall), OOP staged review sharing the design_review column.
+export const RUBRIC_VERSION = 6;
 
 // §3 — per-mode axis weights.
 const WEIGHTS: Record<SessionMode, Partial<Record<AxisId, number>>> = {
@@ -37,14 +41,21 @@ const WEIGHTS: Record<SessionMode, Partial<Record<AxisId, number>>> = {
   full_interview: { A: 15, B: 25, C: 20, D: 25, F: 15 },
   system_design: { A: 15, E: 45, D: 25, F: 15 },
   behavioral: { D: 40, F: 60 },
+  // §10 — B renormalizes away when the round never reached code.
+  tech_knowledge: { C: 45, D: 30, B: 25 },
+  oop_design: { A: 15, E: 40, B: 20, D: 25 },
 };
 
 const RANK: Recommendation[] = ['no hire', 'lean no hire', 'hire', 'strong hire'];
 
 // Mode is inferred from which axes have evidence — E means a system-design
 // discussion happened; F with coding evidence means a full interview; F with
-// no coding axes at all means a dedicated behavioral round.
-export function inferMode(axes: ScorecardAxis[]): SessionMode {
+// no coding axes at all means a dedicated behavioral round. The techq and
+// oopdesign personas set their mode directly (their axis sets overlap the
+// coding modes, so inference can't tell them apart).
+export function inferMode(axes: ScorecardAxis[], persona?: Persona): SessionMode {
+  if (persona === 'techq') return 'tech_knowledge';
+  if (persona === 'oopdesign') return 'oop_design';
   const ids = new Set(axes.map((a) => a.axis));
   if (ids.has('E')) return 'system_design';
   if (ids.has('F')) return ids.has('B') || ids.has('C') ? 'full_interview' : 'behavioral';
@@ -56,8 +67,9 @@ export function inferMode(axes: ScorecardAxis[]): SessionMode {
 export function computeDecision(
   axes: ScorecardAxis[],
   redFlags: string[],
+  persona?: Persona,
 ): Pick<GradeSummary, 'mode' | 'weighted' | 'provisional' | 'recommendation' | 'gates'> {
-  const mode = inferMode(axes);
+  const mode = inferMode(axes, persona);
   const table = WEIGHTS[mode];
 
   // Weights renormalized over the axes actually observed — an axis with no
@@ -167,7 +179,8 @@ function open(): DatabaseSync {
       tests_total       INTEGER,
       time_to_green_min REAL,
       narration_coverage_pct REAL,
-      design_review_json TEXT
+      design_review_json TEXT,
+      knowledge_review_json TEXT
     );
   `);
   // Migration for gradebooks created before narration coverage was tracked.
@@ -179,6 +192,12 @@ function open(): DatabaseSync {
   // Migration for gradebooks created before the §8 design review (rubric v4).
   try {
     db.exec('ALTER TABLE grades ADD COLUMN design_review_json TEXT');
+  } catch {
+    // column already exists
+  }
+  // Migration for gradebooks created before the §10 knowledge review (rubric v6).
+  try {
+    db.exec('ALTER TABLE grades ADD COLUMN knowledge_review_json TEXT');
   } catch {
     // column already exists
   }
@@ -199,7 +218,7 @@ export function recordGrade(opts: {
   // the gradebook trendlines.
   const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
   const axes = scorecard.axes.map((a) => ({ ...a, score: clamp(Math.round(a.score * 2) / 2, 1, 4) }));
-  const decision = computeDecision(axes, scorecard.red_flags);
+  const decision = computeDecision(axes, scorecard.red_flags, persona);
   const telemetry = computeTelemetry(session);
   const hintAvgLevel =
     scorecard.hints.length > 0
@@ -224,8 +243,8 @@ export function recordGrade(opts: {
        (session_id, graded_at, rubric_version, mode, persona, problem_title, weighted, provisional,
         recommendation, gates_json, axes_json, hint_avg_level, clarification_hits, red_flags, green_flags,
         duration_min, runs, build_failures, tests_passed, tests_total, time_to_green_min, narration_coverage_pct,
-        design_review_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        design_review_json, knowledge_review_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       session.id,
@@ -251,6 +270,7 @@ export function recordGrade(opts: {
       grade.timeToGreenMin,
       grade.narrationCoveragePct,
       scorecard.design_review ? JSON.stringify(scorecard.design_review) : null,
+      scorecard.knowledge_review ? JSON.stringify(scorecard.knowledge_review) : null,
     );
   return grade;
 }
@@ -291,5 +311,8 @@ export function listGrades(): GradeRecord[] {
     timeToGreenMin: r.time_to_green_min as number | null,
     narrationCoveragePct: r.narration_coverage_pct as number | null,
     designReview: r.design_review_json ? (JSON.parse(r.design_review_json as string) as DesignReview) : null,
+    knowledgeReview: r.knowledge_review_json
+      ? (JSON.parse(r.knowledge_review_json as string) as KnowledgeReview)
+      : null,
   }));
 }

@@ -16,11 +16,7 @@ const ENVIRONMENTS: Record<Language, { intro: string; harnessContract: string }>
   },
 };
 
-export const intakePrompt = (
-  language: Language,
-) => `You convert rough, pasted interview-problem text into a structured practice problem for a local practice IDE. ${ENVIRONMENTS[language].intro}
-
-SCENARIO FRAMING — first decide which of two cases the pasted problem is. Real interviewers dress bare algorithms in a work scenario, but they never pile fiction on top of a problem that already lives in the real world.
+const SCENARIO_FRAMING = `SCENARIO FRAMING — first decide which of two cases the pasted problem is. Real interviewers dress bare algorithms in a work scenario, but they never pile fiction on top of a problem that already lives in the real world.
 
 CASE 1 — ALREADY GROUNDED: the pasted text already has a real-world setting. This includes design problems (an LRU cache, an underground-fare tracker, a rate limiter, "design a data structure that...") and any statement already about transactions, users, logs, prices, servers, tickets. KEEP ITS OWN SETTING. Do not invent a new product context, do not rename its entities, do not add backstory or a fictional team. Your only edits: phrase it the way an interviewer would say it out loud (terse, conversational), move constraints/examples into the private fields below, and — only if the canonical problem NAME leaks through the title or stub naming — retitle/rename just enough to hide the name while keeping the same setting. Extra scenario on an already-real problem is noise, not realism.
 
@@ -31,15 +27,32 @@ CASE 2 — BARE ALGORITHM: the statement is abstract ("given an array of integer
 
 BOTH CASES:
 - FIDELITY RULE: the underlying algorithmic task must stay exactly the pasted problem — same input shape, same required output, same optimal solution. The costume changes; the problem does not. Never add requirements that change what must be implemented.
-- PROPORTION: context is one or two sentences, never a paragraph of world-building. The framing exists to hide the pattern and force clarifying questions — anything beyond that is waste.
+- PROPORTION: context is one or two sentences, never a paragraph of world-building. The framing exists to hide the pattern and force clarifying questions — anything beyond that is waste.`;
+
+const PLAIN_FRAMING = `PLAIN FRAMING — the candidate turned scenario dressing OFF. Do not invent any context: no product setting, no fictional team, no renamed entities. Deliver the problem as itself — if the pasted text has its own real-world setting, keep it verbatim in spirit; if it is a bare algorithm, it stays a bare algorithm ("given an array of prices..." stays about an array). Still phrase the statement the way an interviewer would SAY it — terse and conversational, not LeetCode legalese — and constraints/examples still move into the private fields below (extracting them by asking is still scored). The title and stub may use natural, even canonical, naming; identity-hiding is off.`;
+
+export const intakePrompt = (
+  language: Language,
+  framing: 'scenario' | 'plain' = 'scenario',
+) => `You convert rough, pasted interview-problem text into a structured practice problem for a local practice IDE. ${ENVIRONMENTS[language].intro}
+
+${framing === 'plain' ? PLAIN_FRAMING : SCENARIO_FRAMING}
 
 Produce JSON with these fields:
 
-- title: a name in the problem's setting (Case 1: its own setting; Case 2: the invented scenario's, e.g. "Flagging card fraud") — never the canonical algorithm-problem name.
+- title: ${
+  framing === 'plain'
+    ? "a short natural name for the task (canonical names are fine in plain framing)."
+    : 'a name in the problem\'s setting (Case 1: its own setting; Case 2: the invented scenario\'s, e.g. "Flagging card fraud") — never the canonical algorithm-problem name.'
+}
 - statement: the scenario the way an interviewer would SAY it — 2-4 conversational sentences: one or two of context, then the task. Deliberately omit input sizes, value ranges, edge-case enumeration and complexity targets: the candidate is scored on extracting those by asking. Do not include worked examples in the statement.
 - constraints: the interviewer's private answer key — NOT shown to the candidate. Every fact they might ask for, in the scenario's vocabulary: input size/range, value bounds, empty/null behaviour, duplicates, ordering, mutation, invalid input, expected complexity target. One fact per string, phrased as a direct answer.
 - examples: the interviewer's private pocket examples (input, output, note — empty string if no note), used only when the candidate asks for an example or needs an adversarial case. NOT shown to the candidate.
-- signature: the stub written into the editor as the starting buffer — LeetCode-shaped but named in the SCENARIO's vocabulary (a stub called largestRectangleArea(heights) would undo the disguise). Complete class/function declarations with empty bodies that return a default value where needed. ${
+- signature: the stub written into the editor as the starting buffer — LeetCode-shaped${
+  framing === 'plain'
+    ? ' with natural naming'
+    : " but named in the SCENARIO's vocabulary (a stub called largestRectangleArea(heights) would undo the disguise)"
+}. Complete class/function declarations with empty bodies that return a default value where needed. ${
   language === 'cpp'
     ? 'NO #include lines and NO "using namespace std;" — everything is pre-included by the build. No main(). Match LeetCode C++ conventions (e.g. "class Solution { public: ... };").'
     : 'Include any imports the stub itself needs (e.g. from typing import List, Optional). No main/driver code. Match LeetCode Python conventions (e.g. "class Solution:\\n    def twoSum(self, nums: List[int], target: int) -> List[int]:").'

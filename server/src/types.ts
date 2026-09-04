@@ -7,6 +7,7 @@ import type {
   Persona,
   Scorecard,
   Selection,
+  TechTopic,
   TestsResult,
   Turn,
 } from '../../shared/protocol';
@@ -118,4 +119,15 @@ export interface Session {
   // Active system-design bank question (sysdesign persona) — id into
   // DESIGN_BANK; the brief is injected into the persona's system prompt.
   designQuestionId: string | null;
+  // Tech-knowledge round (techq persona): the chosen topic chips and the
+  // sampled question ids — their answer keys/ladders are injected into the
+  // system prompt and the grader payload.
+  techTopics: TechTopic[] | null;
+  techQuestionIds: string[] | null;
+  // Active debug-&-optimize exercise (techq persona) — its planted-issue key
+  // stays server-side for the interviewer brief and the grader.
+  debugExerciseId: string | null;
+  // Active OOP design bank question (oopdesign persona) — mirrors
+  // designQuestionId.
+  oopQuestionId: string | null;
 }

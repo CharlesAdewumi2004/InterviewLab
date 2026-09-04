@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ClientMessage, ServerMessage } from '../../../shared/protocol';
 
-// Survives reconnects AND page refreshes: the last session id is offered back
-// to the server, which holds detached sessions for a while and resumes them.
+// Survives reconnects, page refreshes, closed tabs AND browser restarts: the
+// last session id is offered back to the server, which resumes the session
+// from memory (parked on disconnect) or rehydrates it from disk (after a
+// server restart). localStorage, not sessionStorage — a closed tab must not
+// orphan a 40-minute interview.
 const SID_KEY = 'practice-ide:sid';
 
 export function rememberSessionId(id: string): void {
-  sessionStorage.setItem(SID_KEY, id);
+  localStorage.setItem(SID_KEY, id);
 }
 
 export function useSocket(onMessage: (msg: ServerMessage) => void): {
@@ -25,7 +28,7 @@ export function useSocket(onMessage: (msg: ServerMessage) => void): {
 
     function connect() {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      const sid = sessionStorage.getItem(SID_KEY);
+      const sid = localStorage.getItem(SID_KEY);
       const ws = new WebSocket(`${proto}://${location.host}/ws${sid ? `?sid=${encodeURIComponent(sid)}` : ''}`);
       wsRef.current = ws;
       ws.onopen = () => setConnected(true);

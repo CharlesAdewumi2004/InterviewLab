@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { IncomingMessage } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
-import type { ClientMessage, ClientProblem, Scorecard, ServerMessage, Turn } from '../../shared/protocol';
+import type { ClientMessage, ClientProblem, Scorecard, ServerMessage, TechTopic, Turn } from '../../shared/protocol';
 import { activeMs, pausedMsUntil, SessionStore } from './session.js';
 import { assembleTurn, buildSystemPrompt } from './context.js';
 import { ChatSession, maybeCompact, structuredCall } from './claude.js';
@@ -15,6 +15,9 @@ import { ClangdSession } from './clangd.js';
 import { deleteGrade, listGrades, recordGrade } from './gradebook.js';
 import { dailyRecap } from './recap.js';
 import { getDesignQuestion, listDesignQuestions, randomDesignQuestion } from './sysdesign/bank.js';
+import { getTechQuestion, sampleTechRound, TECH_TOPIC_LABELS } from './techq/bank.js';
+import { debugToProblem, getDebugExercise, listDebugExercises, randomDebugExercise } from './techq/debug-bank.js';
+import { getOopQuestion, listOopQuestions, randomOopQuestion } from './oop/bank.js';
 import { clearCv, cvStatus, setCv } from './cv.js';
 import { listCodingQuestions } from './coding-bank.js';
 import { compileAndRun } from './runner.js';
@@ -59,7 +62,7 @@ function toClientProblem(p: ServerProblem): ClientProblem {
   // Oral delivery hides even the title — a LeetCode problem name is a solution
   // giveaway, and on a real phone screen you only get what you heard.
   if (p.oral) return { title: 'Problem (delivered orally)', statement: '', signature: p.signature, oral: true };
-  return { title: p.title, statement: p.statement, signature: p.signature, oral: false };
+  return { title: p.title, statement: p.statement, signature: p.signature, oral: false, debug: p.debug === true };
 }
 
 // Sessions survive disconnects: on close the store is parked here and a
@@ -76,8 +79,12 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
     clearTimeout(held.timer);
     detached.delete(sid as string);
   }
-  let store = held ? held.store : new SessionStore();
-  const resumed = held !== undefined;
+  // Durable resume: not parked in memory (server restarted — tsx reloads on
+  // every code change) → rehydrate the live session from its file on disk.
+  // Ended sessions never resume; the downtime gap is recorded as a pause.
+  const fromDisk = !held && sid ? SessionStore.fromDisk(sid) : null;
+  let store = held ? held.store : (fromDisk ?? new SessionStore());
+  const resumed = held !== undefined || fromDisk !== null;
   let chatBusy = false;
   let runBusy = false;
   let endBusy = false;
@@ -102,6 +109,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
     const lastPause = s.pauseSpans[s.pauseSpans.length - 1];
     const pausedNow = lastPause !== undefined && lastPause.to === null;
     const dq = s.designQuestionId ? getDesignQuestion(s.designQuestionId) : undefined;
+    const oq = s.oopQuestionId ? getOopQuestion(s.oopQuestionId) : undefined;
     send({
       type: 'session:ready',
       sessionId: s.id,
@@ -118,9 +126,24 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
       designQuestion: dq
         ? { id: dq.id, title: dq.title, difficulty: dq.difficulty, asks: dq.asks, patterns: dq.patterns }
         : null,
+      techTopics: s.techTopics,
+      oopQuestion: oq
+        ? { id: oq.id, title: oq.title, difficulty: oq.difficulty, asks: oq.asks, patterns: oq.patterns }
+        : null,
     });
   };
   announceSession(resumed);
+
+  // Model-free interviewer turn (bank-authored text): instant, and it works
+  // even when the subscription's rate window is exhausted. The fresh runtime
+  // replays it from history on the first real message.
+  const cannedTurn = (text: string) => {
+    const turn: Turn = { role: 'assistant', content: text, at: Date.now(), persona: store.session.persona };
+    store.addTurn(turn);
+    store.save();
+    send({ type: 'chat:delta', text });
+    send({ type: 'chat:done', turn });
+  };
 
   // Semantic autocomplete: boot clangd eagerly so the expensive first parse
   // of <bits/stdc++.h> happens now, not on the first keystroke.
@@ -212,7 +235,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
     try {
       const { data, usage } = await structuredCall<ServerProblem>({
         purpose: 'intake',
-        system: intakePrompt(st.session.language),
+        system: intakePrompt(st.session.language, msg.framing === 'plain' ? 'plain' : 'scenario'),
         userContent: msg.raw,
         schema: INTAKE_SCHEMA as unknown as Record<string, unknown>,
       });
@@ -305,6 +328,42 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
             ? { title: q.title, difficulty: q.difficulty, prompt: q.prompt, ground_truth: q.brief }
             : null;
         })(),
+        // Tech-knowledge round: the sampled questions with their answer keys —
+        // per-question verdicts are graded against these, never the grader's
+        // own recall.
+        tech_round: s.techQuestionIds?.length
+          ? {
+              topics: (s.techTopics ?? []).map((t) => TECH_TOPIC_LABELS[t]),
+              questions: s.techQuestionIds
+                .map((id) => getTechQuestion(id))
+                .filter((q): q is NonNullable<typeof q> => q !== undefined)
+                .map((q) => ({
+                  topic: q.topic,
+                  question: q.question,
+                  answer_key: q.answerKey,
+                  follow_ups: q.followUps,
+                })),
+            }
+          : null,
+        // Debug exercise: the planted-issue key for find-phase recall grading.
+        debug_exercise: (() => {
+          const ex = s.debugExerciseId ? getDebugExercise(s.debugExerciseId) : undefined;
+          return ex
+            ? {
+                title: ex.title,
+                scenario: ex.scenario,
+                planted_issues: ex.plantedIssues,
+                expected_fix: ex.brief,
+              }
+            : null;
+        })(),
+        // OOP round: the question's private ground truth for the staged review.
+        oop_question: (() => {
+          const q = s.oopQuestionId ? getOopQuestion(s.oopQuestionId) : undefined;
+          return q
+            ? { title: q.title, difficulty: q.difficulty, prompt: q.prompt, patterns: q.patterns, ground_truth: q.brief }
+            : null;
+        })(),
         transcript: s.turns.map((t) => ({
           at: minutesIn(t.at),
           role: t.role,
@@ -378,6 +437,9 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
     switch (msg.type) {
       case 'editor:state':
         store.updateEditor(msg.buffer, msg.selection, msg.cursor);
+        // Debounced: the on-disk copy must track keystrokes closely enough
+        // that a server restart (tsx reload) can rehydrate mid-interview.
+        store.saveSoon();
         break;
       case 'chat:send':
         void handleChat(msg);
@@ -434,11 +496,71 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
           type: 'design:ready',
           question: { id: q.id, title: q.title, difficulty: q.difficulty, asks: q.asks, patterns: q.patterns },
         });
-        const turn: Turn = { role: 'assistant', content: q.prompt, at: Date.now(), persona: store.session.persona };
-        store.addTurn(turn);
+        cannedTurn(q.prompt);
+        break;
+      }
+      case 'techq:start': {
+        // Same model-free pattern as design:pick: the bank supplies the first
+        // question verbatim; the private set rides the rebuilt system prompt.
+        if (chatBusy) {
+          send({ type: 'chat:error', message: 'Still responding — start the round after this reply.' });
+          break;
+        }
+        const topics = msg.topics.length ? msg.topics : (['cpp', 'concurrency'] as TechTopic[]);
+        const qs = sampleTechRound(topics);
+        if (!qs.length) {
+          send({ type: 'chat:error', message: 'No bank questions for those topics yet.' });
+          break;
+        }
+        store.setTechRound(topics, qs.map((q) => q.id));
         store.save();
-        send({ type: 'chat:delta', text: q.prompt });
-        send({ type: 'chat:done', turn });
+        resetChat(); // system prompt now carries the sampled question set
+        send({ type: 'techq:ready', topics });
+        cannedTurn(
+          `Alright — fundamentals round: ${topics.map((t) => TECH_TOPIC_LABELS[t].toLowerCase()).join(', ')}. No trick questions, just tell me how things actually work. ${qs[0].question}`,
+        );
+        break;
+      }
+      case 'debug:pick': {
+        if (chatBusy) {
+          send({ type: 'chat:error', message: 'Still responding — pick an exercise after this reply.' });
+          break;
+        }
+        const ex = (msg.id ? getDebugExercise(msg.id) : undefined) ?? randomDebugExercise(store.session.language);
+        if (!ex) {
+          send({ type: 'problem:error', message: `No debug exercises for ${store.session.language} yet — switch language or pick a topic drill.` });
+          break;
+        }
+        // Runs through the standard problem machinery: flawed code becomes the
+        // editor seed, the harness (with its timed perf case) feeds Run, and
+        // the planted-issue key stays in the private brief.
+        const problem = debugToProblem(ex);
+        store.setProblem(problem);
+        store.setDebugExercise(ex.id);
+        store.save();
+        resetChat();
+        send({ type: 'problem:ready', problem: toClientProblem(problem), buffer: problem.signature });
+        cannedTurn(`${ex.scenario} The code's in your editor — have a read and tell me what you see.`);
+        break;
+      }
+      case 'oop:pick': {
+        if (chatBusy) {
+          send({ type: 'chat:error', message: 'Still responding — pick a question after this reply.' });
+          break;
+        }
+        const q = (msg.id ? getOopQuestion(msg.id) : undefined) ?? randomOopQuestion();
+        if (!q) {
+          send({ type: 'chat:error', message: 'The OOP bank is empty.' });
+          break;
+        }
+        store.setOopQuestion(q.id);
+        store.save();
+        resetChat(); // system prompt now carries the question's private brief
+        send({
+          type: 'oop:ready',
+          question: { id: q.id, title: q.title, difficulty: q.difficulty, asks: q.asks, patterns: q.patterns },
+        });
+        cannedTurn(q.prompt);
         break;
       }
       case 'session:reset': {
@@ -501,6 +623,10 @@ fastify.get('/api/design-questions', async () => ({ questions: listDesignQuestio
 // Coding bank: frequency-grounded suggestions (Bloomberg tier-1 + grad top-40).
 // Seeds are inputs, not answer keys — intake re-dresses them as scenarios.
 fastify.get('/api/coding-questions', async () => ({ questions: listCodingQuestions() }));
+// OOP design bank: client-safe metadata only (briefs never leave the server).
+fastify.get('/api/oop-questions', async () => ({ questions: listOopQuestions() }));
+// Debug-&-optimize exercises: titles only — the planted issues stay private.
+fastify.get('/api/debug-exercises', async () => ({ exercises: listDebugExercises() }));
 
 // Candidate CV: uploaded as PDF (parsed server-side) or plain text, stored
 // locally in sessions/cv.txt (git-ignored), injected into the behavioral and

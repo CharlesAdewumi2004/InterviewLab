@@ -50,6 +50,7 @@ export class SessionStore {
   // enters model context (§6.2). Used to produce mechanical edit summaries.
   private lastTurnBuffer: string;
   private lastErrorSignature: string | null = null;
+  private saveTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     const now = Date.now();
@@ -81,8 +82,59 @@ export class SessionStore {
       compactedThrough: 0,
       debrief: null,
       designQuestionId: null,
+      techTopics: null,
+      techQuestionIds: null,
+      debugExerciseId: null,
+      oopQuestionId: null,
     };
     this.lastTurnBuffer = this.session.buffer;
+  }
+
+  // Rehydrate a session persisted to disk (durable resume across server
+  // restarts). Missing fields — session files written by older versions —
+  // fall back to the fresh-session defaults; a downtime gap since the file
+  // was last written is recorded as a pause so it never counts as interview
+  // time or reads as silence.
+  static fromDisk(sid: string): SessionStore | null {
+    // Session ids are date-uuid slugs; reject anything that could escape the
+    // sessions dir (the sid arrives from a query parameter).
+    if (!/^[\w.-]+$/.test(sid)) return null;
+    const file = path.join(SESSIONS_DIR, `${sid}.json`);
+    let raw: string, mtimeMs: number;
+    try {
+      raw = fs.readFileSync(file, 'utf8');
+      mtimeMs = fs.statSync(file).mtimeMs;
+    } catch {
+      return null;
+    }
+    let onDisk: Partial<Session>;
+    try {
+      onDisk = JSON.parse(raw) as Partial<Session>;
+    } catch {
+      return null;
+    }
+    // An ended (graded) session never resumes — refresh after the debrief
+    // starts clean.
+    if (!onDisk.id || onDisk.debrief) return null;
+
+    const store = new SessionStore();
+    store.session = { ...store.session, ...onDisk, id: onDisk.id };
+    const s = store.session;
+    const now = Date.now();
+    // Close any span state the crash/restart left open, then account for the
+    // downtime: if the session wasn't paused when last saved, the gap between
+    // the file's mtime and now becomes a closed pause span.
+    const lastPause = s.pauseSpans[s.pauseSpans.length - 1];
+    const wasPaused = lastPause !== undefined && lastPause.to === null;
+    if (!wasPaused && now - mtimeMs > 15_000) {
+      s.pauseSpans.push({ from: mtimeMs, to: now });
+    }
+    // The narration mic is client-side and off on a fresh page; close a span
+    // left open by the shutdown at the file's last-written time.
+    const lastMic = s.narrationSpans[s.narrationSpans.length - 1];
+    if (lastMic && lastMic.to === null) lastMic.to = mtimeMs;
+    store.lastTurnBuffer = s.buffer;
+    return store;
   }
 
   updateEditor(buffer: string, selection: Selection | null, cursor: Cursor): void {
@@ -109,6 +161,9 @@ export class SessionStore {
 
   setProblem(problem: ServerProblem): void {
     this.session.problem = problem;
+    // A freshly intaken problem replaces any active debug exercise; debug:pick
+    // re-sets the id right after this call.
+    this.session.debugExerciseId = null;
     this.session.buffer = problem.signature;
     this.session.selection = null;
     this.session.cursor = { line: 1, column: 1 };
@@ -191,6 +246,19 @@ export class SessionStore {
     this.session.designQuestionId = id;
   }
 
+  setTechRound(topics: Session['techTopics'], questionIds: string[]): void {
+    this.session.techTopics = topics;
+    this.session.techQuestionIds = questionIds;
+  }
+
+  setDebugExercise(id: string | null): void {
+    this.session.debugExerciseId = id;
+  }
+
+  setOopQuestion(id: string): void {
+    this.session.oopQuestionId = id;
+  }
+
   // Open/close a pause span. Idempotent, same shape as setNarrationState.
   setPaused(on: boolean): void {
     const spans = this.session.pauseSpans;
@@ -258,6 +326,10 @@ export class SessionStore {
   }
 
   save(): void {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
     if (!this.hasActivity()) return;
     try {
       fs.mkdirSync(SESSIONS_DIR, { recursive: true });
@@ -268,5 +340,16 @@ export class SessionStore {
     } catch (err) {
       console.error('failed to persist session:', err);
     }
+  }
+
+  // Debounced save for chatty paths (editor keystrokes): sessions must be
+  // rehydratable from disk after a server restart (tsx watch reloads on every
+  // code change), so the on-disk copy can't only update at turn boundaries.
+  saveSoon(delayMs = 5_000): void {
+    if (this.saveTimer) return; // trailing-edge debounce, first call wins
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      this.save();
+    }, delayMs);
   }
 }

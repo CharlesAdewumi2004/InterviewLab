@@ -11,6 +11,8 @@ const MODE_LABELS: Record<string, string> = {
   full_interview: 'Full interview',
   system_design: 'System design',
   behavioral: 'Behavioral',
+  tech_knowledge: 'Tech knowledge',
+  oop_design: 'OOP design',
 };
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {

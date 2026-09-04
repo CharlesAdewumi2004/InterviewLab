@@ -71,6 +71,37 @@ Weights reflect Bloomberg's documented emphasis: coding competence is the baseli
 | D — Communication & delivery | 40% |
 | F — Motivation, fit & story substance | 60% |
 
+### Technical-knowledge rounds (rubric v6 — verbal CS drills, coding escalations, debug exercises)
+
+| Axis | Weight |
+|---|---|
+| C — Technical knowledge depth & correctness | 45% |
+| D — Communication & explanation quality | 30% |
+| B — Code quality (escalations / debug fixes; renormalized away when no code was written) | 25% |
+
+Mode is set by the persona (`techq`), not inferred from axes — a knowledge round scores C/D like
+a coding round but is a different exercise. In this mode C's anchors read as *knowledge*: 1 =
+wrong or bluffed answers on fundamentals; 2 = surface definitions that collapse under the first
+follow-up; 3 = correct answers that survive the follow-up ladder on most questions; 4 = depth
+beyond the ladder — mechanism-level answers, correct edge cases, connects topics unprompted.
+B applies only to code actually written (escalation tasks, debug-exercise fixes) and keeps its
+strong-C++ calibration.
+
+### OOP design rounds (rubric v6 — talk-then-code low-level design)
+
+| Axis | Weight |
+|---|---|
+| A — Requirements extraction | 15% |
+| E — Object-oriented design | 40% |
+| B — Skeleton implementation quality (renormalized away if the round never reached code) | 20% |
+| D — Communication & collaboration | 25% |
+
+Mode is set by the persona (`oopdesign`). E's anchors read as *class design*: 1 = god object /
+no abstraction; 2 = plausible classes but wrong responsibilities or inheritance-where-composition;
+3 = clean responsibilities, sensible interfaces, at least one pattern applied where it earns its
+keep; 4 = all of 3 plus the design survives the extension asks with minimal change, trade-offs
+argued (pattern vs simplicity), SOLID violations self-caught.
+
 ### Behavioral anchors
 
 **Axis A — Problem comprehension & requirements**
@@ -294,3 +325,54 @@ applied; the anchors themselves are unchanged.
    coding, while bugs in *written code* are surfaced by failing inputs. The cost accounting in
    §3's hint rules already reflects this; the point here is that a well-timed intervention
    followed by strong uptake is normal interview mechanics, not a red flag.
+
+---
+
+## 10. Round-Specific Reviews (rubric v6)
+
+Two additional round types, each with a structured review recorded alongside the axes (the §5
+decision math is unchanged; the review is structured evidence the axes must agree with).
+
+### 10.1 Technical-knowledge review (`knowledge_review`)
+
+Produced whenever the session was a tech-knowledge round. For **every bank question the
+interviewer actually asked** (the grader payload carries each question's private answer key and
+follow-up ladder):
+
+- **Per-question verdict** — `nailed` (answer covered the key facts and survived the follow-ups) ·
+  `partial` (core right, follow-ups exposed gaps, or needed leading) · `missed` (wrong, bluffed,
+  or "I don't know" on a depth-1 fundamental). An honest "I don't know, here's how I'd reason"
+  on a depth-3 question is a respectable *partial*, never an automatic miss — bluffing is the
+  red-flag behavior, not ignorance.
+- **Verdicts are graded against the answer key**, not the grader's own recall — the key was
+  written with the question.
+- `strongest` / `weakest` — the topics (not questions) where the candidate was most/least solid,
+  so the recap can steer drills by topic chip.
+
+**Debug-&-optimize exercises** additionally get a `debug` block, graded against the exercise's
+planted-issue key:
+
+- `issuesFound` / `issuesMissed` — recall against the planted issues (category + severity
+  matter: missing a high-severity UB issue outweighs missing a style nit).
+- `falsePositives` — "issues" the candidate confidently flagged that were not real (bluff-adjacent;
+  two or more is Axis C evidence).
+- `fixOutcome` — did the fix pass the tests, did it introduce regressions, was the perf gate
+  (the large timed case) passed. The perf gate is objective: recorded from the run history.
+- Find-phase verdicts feed C; fix-phase code quality feeds B; how they *narrated* the reading
+  of unfamiliar code feeds D (reading code aloud coherently is a tested skill at C++ shops).
+
+### 10.2 OOP design review (staged, reuses `design_review`)
+
+OOP rounds are reviewed stage-by-stage like system design, with OOP stages:
+
+| Stage | What good looks like |
+|---|---|
+| Requirements | Extracts the functional scope by asking; states what's out of scope. Long unprioritized lists are a negative, same as system design. |
+| Decomposition (`entities`) | The core classes and their relationships, responsibilities stated in one line each; composition preferred where inheritance adds nothing. |
+| Interfaces | Key methods with deliberate signatures; invariants owned by the class that can protect them. |
+| Patterns & extensibility (`patterns`) | Patterns applied where they earn their keep and named honestly; the design survives the interviewer's "now add X" with local change. Pattern name-dropping without need is a negative. |
+| Implementation | The skeleton compiles and matches the discussed design; C++ idioms (RAII, rule of zero, const-correctness) at the strong-C++ bar. |
+
+`level_signal` and the depth/breadth/proactiveness paragraph carry over unchanged from §8. The
+review is stored in the same gradebook column as the system-design review; stages distinguish
+the round type.
