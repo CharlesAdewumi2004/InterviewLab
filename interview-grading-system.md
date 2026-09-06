@@ -376,3 +376,30 @@ OOP rounds are reviewed stage-by-stage like system design, with OOP stages:
 `level_signal` and the depth/breadth/proactiveness paragraph carry over unchanged from §8. The
 review is stored in the same gradebook column as the system-design review; stages distinguish
 the round type.
+
+**OOD calibration (rubric v7 — from 10 real OOD mock transcripts,
+`interview-data/yt-dlp-transcripts/`).** How real OOD interviewers actually weighed these rounds,
+applied on top of the anchors above:
+
+- **The API-signature gate is the requirements checkpoint.** Writing the method signatures before
+  implementing is how a candidate proves they understood the functional requirements. Beginning
+  implementation while requirements or the API are still fuzzy is the single most-cited criticism —
+  it caps the Requirements stage and is Axis A evidence, regardless of how good the eventual code
+  is. Conversely, signatures-first with the scope pinned is a clear positive even if the
+  implementation runs short of time.
+- **Top-down beats bottom-up.** Driving from the top-level API and object relationships down reads
+  as solid; starting at a leaf class's fields and details before the contracts exist is a real
+  process weakness ("could have been prevented if you worked top-down").
+- **Promoting primitives to classes is graded.** Reaching for raw maps/dicts of loose fields where
+  a domain type belongs, and needing to be pushed to model it, is an Axis E (decomposition)
+  negative. Doing it unprompted, with a stated reason, is a positive.
+- **Noticing an incomplete spec is a skill check, not a gotcha.** When the prompt deliberately
+  withholds a load-bearing relationship, asking for it is the pass; assuming it and building on the
+  assumption is the miss — score it under A, not as bad luck.
+- **Hint resistance is the biggest single negative** (consistent with §4's red flags): pushing on
+  after a leading "do you really think you should be doing that?" was the top-cited reject cause in
+  these transcripts. A candidate who stops, reconsiders, and integrates the steer is showing the
+  right behaviour even though they needed the nudge.
+- **Recursion/Composite fluency** (file trees, recursive sub-recipes) and **reusing one method
+  recursively** rather than reaching for heavier machinery (toposort) are depth signals for the
+  Implementation and Patterns stages.

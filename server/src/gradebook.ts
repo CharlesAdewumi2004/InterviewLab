@@ -33,7 +33,10 @@ import type { Session } from './types.js';
 // v6: §10 tech-knowledge and OOP-design rounds — persona-set modes with their
 // own weights, knowledge_review (per-question verdicts vs answer keys, debug
 // planted-issue recall), OOP staged review sharing the design_review column.
-export const RUBRIC_VERSION = 6;
+// v7: §10.2 OOD calibration from 10 real OOD mock transcripts — API-signature
+// gate as the requirements checkpoint, top-down-from-contracts, promote-
+// primitives-to-classes, notice-the-incomplete-spec, hint-resistance weighting.
+export const RUBRIC_VERSION = 7;
 
 // §3 — per-mode axis weights.
 const WEIGHTS: Record<SessionMode, Partial<Record<AxisId, number>>> = {

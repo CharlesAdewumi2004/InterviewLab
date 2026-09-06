@@ -759,6 +759,359 @@ export const OOP_BANK: OopQuestion[] = [
       ],
       "skeleton": "using TimePoint = std::chrono::steady_clock::time_point;\nusing Duration  = std::chrono::steady_clock::duration;\n\nstruct Notification {\n    uint64_t    id;                          // dedup key -> at-least-once safe\n    std::string userId, topic, body;\n    int         severity;\n};\n\nenum class SendStatus { Ok, RetryableError, PermanentError };\n\nclass Channel {                              // passive transport: no retries/threads/sleeps\npublic:\n    virtual ~Channel() = default;\n    virtual std::string name() const = 0;\n    virtual SendStatus send(const Notification&) = 0;   // one synchronous attempt\n};\nclass EmailChannel : public Channel { /* smtp client */ };\nclass SmsChannel   : public Channel { /* sms gateway */ };\n\nclass RetryPolicy {\npublic:\n    virtual ~RetryPolicy() = default;\n    virtual std::optional<Duration> nextDelay(int attempt) const = 0; // nullopt = dead-letter\n};\nclass ExponentialBackoff : public RetryPolicy { /* base, factor, cap, maxAttempts */ };\n\nclass DeadLetterSink {\npublic:\n    virtual ~DeadLetterSink() = default;\n    virtual void onDead(const Notification&, const std::string& channel) = 0;\n};\n\nclass SubscriptionRegistry {                 // topic -> users, user -> channels\npublic:\n    void subscribe(const std::string& userId, const std::string& topic);\n    void setChannels(const std::string& userId, std::vector<std::string> channels);\n    std::vector<std::pair<std::string, std::string>>   // (userId, channelName)\n    route(const Notification&) const;\nprivate:\n    std::unordered_map<std::string, std::vector<std::string>> topicSubs_, userChannels_;\n};\n\nclass Dispatcher {                           // OWNS queue + workers; channels stay dumb\npublic:\n    Dispatcher(std::vector<std::unique_ptr<Channel>> channels,\n               std::unique_ptr<RetryPolicy> retry,\n               std::unique_ptr<DeadLetterSink> dlq,\n               size_t workerCount);\n    ~Dispatcher();                           // shutdown(drain=true), join workers\n    void publish(Notification n);            // route -> enqueue tasks; non-blocking\n    void shutdown(bool drain);\nprivate:\n    struct Task { Notification n; std::string channel; int attempt; TimePoint due; };\n    struct DueLater { bool operator()(const Task& a, const Task& b) const; };\n    std::priority_queue<Task, std::vector<Task>, DueLater> queue_; // min-heap on due:\n                                             // retries re-enqueued, workers never sleep\n    std::mutex mu_;\n    std::condition_variable cv_;\n    std::vector<std::thread> workers_;\n    std::unordered_map<std::string, std::unique_ptr<Channel>> channels_;\n    std::unique_ptr<RetryPolicy> retry_;\n    std::unique_ptr<DeadLetterSink> dlq_;\n    SubscriptionRegistry registry_;\n    bool stopping_ = false;\n    void workerLoop();                       // pop when due; send; Ok/dead/re-enqueue\n};"
     }
+  },
+  {
+    "id": "oop-hotel-booking",
+    "title": "Online Hotel Booking System",
+    "difficulty": "easy",
+    "asks": "Design an online hotel booking system where a user searches for a hotel (by name or by city) and then books a room.",
+    "patterns": [
+      "Facade / single entry-point class (the interviewer hands you the interface class)",
+      "Delegation down the ownership chain (System -> Hotel -> Room)",
+      "Transactional / data object (Booking) to capture an interaction between User, Room and dates",
+      "Enum for a closed set of variants (room type)",
+      "Encapsulation via accessors instead of touching another object's fields directly",
+      "Model nouns as classes; watch for the non-obvious noun (a booking)"
+    ],
+    "prompt": "We're designing an online hotel booking system. A user can search for a hotel by name, or search by city, and then once they have a hotel they can book a room. Start with an interface class the user interacts with, model the classes, then implement some of the functionality. I'll dictate the spec as we go and you can ask questions.",
+    "brief": {
+      "requirements": [
+        "A single interface/entry-point class the user interacts with (interviewer explicitly hands you this: 'start with an interface class of some sort, like a web page' with a search function and a book function) — a facade over the rest of the system",
+        "Search a hotel BY NAME: interviewer withholds behavior — candidate must ask. Names are unique (assume no two hotels share a name), returns the single Hotel or None if not found (interviewer says returning None is fine, not an error)",
+        "Search a hotel BY CITY: this is a SEPARATE method from search-by-name (interviewer clarifies 'two separate methods' — user searches EITHER by name OR by city). Returns a list of Hotels (multiple hotels per city), empty list if none",
+        "Book a room in a hotel: the user does NOT choose a specific room — 'you would book rooms but the user wouldn't care about which ones they are, that's not relevant to the user'. No search-for-room step; assume the hotel exists",
+        "A hotel has a limited/finite number of bookable spots (interviewer confirms when asked)",
+        "The booking call must carry the User (not just a user id) so the booking can be recorded — candidate should surface that a User class is needed (interviewer deliberately probes: 'these user ids you keep assuming — what are they?')",
+        "Withheld until candidate asks (and candidate did NOT ask): search is PREFIX matching, not string equality — interviewer states in feedback he would have revealed this if asked",
+        "Withheld until candidate asks: the real purpose of a Room in a booking / the Room<->User relationship is meant to be captured in a Booking object — interviewer would have forced a Booking earlier if the candidate had pressed on room semantics",
+        "Ignore for the base design (interviewer defers): duplicate-booking-by-same-user, payment, and blacklisted/blocked users are all out of scope for now"
+      ],
+      "entities": [
+        "HotelBookingSystem (interface/facade): holds all hotels (dict keyed by name for now); exposes searchByName, searchByCity, bookRoom, viewBookings, plus addHotel to populate",
+        "Hotel: name, city, list/collection of Rooms; owns booking logic over its own rooms (bookRoom delegates down to a Room)",
+        "Room: belongs to a Hotel (back-reference), roomType (enum), isBooked flag, bookedBy user; a book() method that mutates its own state",
+        "User: id (uuid), email, and a collection of the user's bookings/rooms; addBooking() and getBookings()/viewBookings — THIS record is the crux of the 'view bookings' extension",
+        "RoomType (enum): SINGLE_BED, DOUBLE_BED — every room is exactly one type",
+        "Booking (emerges only at the very end / dates extension): startDate, endDate, room, user — the transactional object that should have existed earlier"
+      ],
+      "interfaces": [
+        "HotelBookingSystem.searchByName(name: string) -> Hotel | None",
+        "HotelBookingSystem.searchByCity(city: string) -> List<Hotel>",
+        "HotelBookingSystem.bookRoom(hotel: Hotel, roomType: RoomType, user: User) -> Room  // throws if hotel invalid or no room of that type free",
+        "HotelBookingSystem.addHotel(hotel: Hotel) -> void",
+        "HotelBookingSystem.viewBookings(user: User) -> List<Room>  // delegates to user.getBookings()",
+        "Hotel.bookRoom(roomType: RoomType, user: User) -> Room  // finds first free room of type, delegates to Room.book, throws if none",
+        "Room.book(user: User) -> void  // sets isBooked=true, sets bookedBy=user",
+        "Room.getRoomType() -> RoomType  // accessor so caller doesn't touch the field",
+        "User.addBooking(room: Room) -> void",
+        "User.getBookings() -> List<Room>"
+      ],
+      "patternNotes": [
+        "Facade: interviewer literally gives you the entry-point class and says a third of these problems set it up this way — recognizing HotelBookingSystem as the single door and delegating inward is the primary signal",
+        "Delegation: bookRoom flows HotelBookingSystem -> Hotel.bookRoom -> Room.book. Reaching into another class's fields (e.g. iterating rooms from the system, or reading room.type directly) instead of delegating/using accessors is the negative signal",
+        "Transactional object: the marquee lesson. A Booking is a non-obvious noun. Smell test the interviewer teaches: if you're passing lots of fields around between User/Room/dates, that interaction wants its own object. Producing Booking only after being prompted = partial credit; producing it unprompted = strong",
+        "Enum: room type is a closed set — enum, not strings/bools. Extends cleanly (if types grew, group rooms in a dict keyed by type)",
+        "Encapsulation: interviewer rewards get_room_type()/getCity() accessors over direct field access — candidate did this and it was noted positively",
+        "Nouns->classes: candidate was strong at turning nouns into classes but weak at confirming the class SET was complete (missed Booking, initially missed User) — the interviewer flags 'solidify whether you have all the right classes' as the gap"
+      ],
+      "extensions": [
+        "ROOM TYPES: 'there are two types of rooms, single beds and double beds; every room is one of the two. When a user books they pass one of these preferences. If a room of that type is available the booking succeeds, otherwise it fails.' Good answer: add a RoomType enum, add roomType to Room, change bookRoom to accept a RoomType and find the FIRST free room of that type. Preserve: short-circuit after booking one matching room (the transcript bug: candidate booked ALL matching rooms because they forgot to return). Also clean up the now-meaningless book-hotel method rather than leaving it.",
+        "VIEW A USER'S BOOKINGS: 'a user should be able to look at their bookings.' Good answer: viewBookings(user) delegates to user.getBookings(). Preserve/expose the real test — this only works if bookRoom actually WROTE the booking back onto the User (user.addBooking(room)). The candidate had NOT been recording it and had to retrofit user.addBooking during this step. This escalation exists to catch whether the data model recorded the booking, not to write a loop.",
+        "DATES (high-level, no code): 'the request now specifies a start date and end date, and dates apply to the whole system — what changes, what breaks, what doesn't?' Good answer: a Room keeps a list of reserved [start,end] intervals; a new request is accepted if it doesn't overlap; viewing bookings must now return time periods too — which is exactly what forces the Booking class (startDate, endDate, room, user) to hold the interaction, with User holding a list of Bookings. This is where a candidate should retroactively realize the transactional object was needed all along."
+      ],
+      "commonMistakes": [
+        "Forgot to record the booking on the User — bookRoom mutated the Room but never called user.addBooking, so viewBookings had nothing to return; had to be retrofitted. The interviewer's #1 called-out failure (data-model field not written back).",
+        "Never created a Booking object until the very end / only after being prompted by the dates question — the transactional object was missed, which is the interviewer's central teaching point.",
+        "Book-room bug: iterated and booked EVERY free room of the requested type instead of short-circuiting after the first — missing return/break. Interviewer flagged it as an un-short-circuited loop.",
+        "Spent too much time implementing method bodies under time pressure and not enough confirming the class set / data model was complete — 'intention broke down near the end'.",
+        "Didn't ask clarifying questions up front that would have raised the level: how search works (it's prefix matching, not equality) and what a Room's purpose is in a booking (should be a Booking). Not asking left ambiguities unresolved and kept the problem at an easier tier.",
+        "Left a stale book-hotel method around after room-type booking made it meaningless instead of cleaning it up.",
+        "Initially assumed user ids without defining a User class; passed user id instead of the User object, then had to switch to passing the full User so Hotel/Room could reach email etc."
+      ],
+      "skeleton": "enum class RoomType { SINGLE_BED, DOUBLE_BED };\n\nclass User {\n  std::string id;            // uuid\n  std::string email;\n  std::vector<Room*> bookings;\npublic:\n  void addBooking(Room* r);\n  std::vector<Room*> getBookings() const;\n};\n\nclass Room {\n  Hotel* hotel;              // back-reference\n  RoomType type;\n  bool isBooked = false;\n  User* bookedBy = nullptr;\npublic:\n  RoomType getRoomType() const;\n  bool booked() const;\n  void book(User* u);        // isBooked=true; bookedBy=u\n};\n\nclass Hotel {\n  std::string name;\n  std::string city;\n  std::vector<Room*> rooms;\npublic:\n  const std::string& getCity() const;\n  Room* bookRoom(RoomType t, User* u);   // first free room of t; throws if none (short-circuit!)\n};\n\nclass HotelBookingSystem {          // facade / entry point\n  std::unordered_map<std::string, Hotel*> hotels;  // keyed by name\npublic:\n  void addHotel(Hotel* h);\n  Hotel* searchByName(const std::string& name);        // nullptr if absent\n  std::vector<Hotel*> searchByCity(const std::string& city);\n  Room* bookRoom(Hotel* h, RoomType t, User* u);       // delegates to h->bookRoom, then u->addBooking\n  std::vector<Room*> viewBookings(User* u);             // delegates to u->getBookings\n};\n\n// Dates extension introduces:\n// class Booking { Date start; Date end; Room* room; User* user; };\n// User then holds std::vector<Booking*> instead of raw rooms."
+    }
+  },
+  {
+    "id": "oop-file-system",
+    "title": "In-Memory File System",
+    "difficulty": "medium",
+    "asks": "Design an in-memory file system exposing writeFile(path, value) that auto-creates all intermediate directories, and readFile(path) that returns the stored value or a sentinel if the path doesn't exist.",
+    "patterns": [
+      "Composite pattern (single n-ary tree node; no File-vs-Folder class split)",
+      "Work top-down from the API contract, not bottom-up from the node class",
+      "Recursive / iterative tree traversal",
+      "YAGNI — don't build Entry/File/Folder hierarchy or premature abstractions",
+      "Encapsulation of traversal helper shared by read and write"
+    ],
+    "prompt": "We're going to design a simplified file system. It's a class that supports two operations to start: write, which takes a string path and a value and writes the value at the end of the path, and read, which takes a path and returns the value there. If the path doesn't already exist, write should create all the intermediate paths. Go ahead and clarify whatever you need.",
+    "brief": {
+      "requirements": [
+        "writeFile(path, value): create the entry at the end of the path, writing the value there. If any intermediate path segments don't exist, create them recursively (interviewer states this explicitly).",
+        "readFile(path): return the value stored at the end of the path. If the path (or any segment) doesn't exist, return a sentinel — transcript 07 uses -1; transcript 06 throws/returns a predefined error string. Either is acceptable if stated.",
+        "Paths are full paths from root, always beginning with '/'. Split on '/' to get segments.",
+        "The value type is deliberately trivial (an int in 07, a string in 06) — the interviewer says the content itself is NOT the point; don't over-engineer it.",
+        "Write never fails; it may return void or a success flag (interviewer explicitly says 'assume it doesn't fail').",
+        "KEY WITHHELD REQUIREMENT: a segment can be BOTH an intermediate directory AND a value-bearing leaf. In 07 the interviewer writes /data/file = 5, then /data/file/file2 = 6, and /data/file still reads 5. The candidate must extract that there is no file-vs-folder distinction — every node is just a node that MAY carry a value. The interviewer stated this ~3 times and treated missing it as the central failure.",
+        "Root ('/') always exists and is owned by the file system object; the first segment is a child of root. Root has no name.",
+        "Don't validate input strings / trailing-slash edge cases — interviewer waves these off ('we don't need to worry about the input')."
+      ],
+      "entities": [
+        "Node (a.k.a. FileSystem tree node): the SINGLE node type. Holds an optional value and a map<string, Node> of children. This is the composite — one class, n-ary tree.",
+        "FileSystem: owns the root Node and exposes writeFile / readFile. Holds the reference to root; traversal starts here.",
+        "(ANTI-ENTITY) Entry/File/Folder class hierarchy: the tempting-but-wrong model. Interviewer calls the File-vs-Folder distinction 'contrived'; candidates who built abstract Entry + File + Folder subclasses were penalized for a suboptimal data structure that cost them time."
+      ],
+      "interfaces": [
+        "FileSystem() — constructs with an empty, unnamed root node",
+        "void writeFile(string path, ValueType value) — split path on '/', walk from root, getOrCreate each segment as a child node, set value on the final node",
+        "ValueType readFile(string path) — split path on '/', walk from root; if any segment is absent return the sentinel (-1 / error), else return the final node's value",
+        "private Node getNode(string path) — SHARED traversal helper used by BOTH write and read; interviewer explicitly coaches extracting this to avoid duplicate traversal code. (Write's variant creates missing nodes; read's returns the sentinel path.)",
+        "Node: map<string,Node> children; optional<ValueType> value  — getOrDefault/containsKey on the children map is the clean idiom the interviewer wanted (07/06 both flagged manual child-loops as clumsy)"
+      ],
+      "patternNotes": [
+        "Composite pattern is THE signal: recognizing that file and folder collapse into one node type. Naming it ('this is the composite pattern') earns explicit credit; some interviewers listen for the term. Missing it still works but produces more code and edge cases.",
+        "Top-down from the API: the strongest coached lesson. Write the read/write signatures and return types DURING clarification, before any node class. Anchors the conversation and is a time-management signal. Candidate in 06 was penalized for building bottom-up from a File class and getting lost.",
+        "Recursive structure: folders reference folders, so traversal is naturally recursive (or iterative with a current-pointer). Whether get-node lives on the node vs. the file system 'depends on what you intend to do' — interviewer is genuinely flexible here; the wrong move is agonizing over placement instead of picking one.",
+        "Map for children (not a list): 07's candidate used a list<children> and had to loop + break to find a child, creating the 'always creates a new folder' bug. Interviewer's tip: use a set/map so getChild is O(1); recognize duplicated traversal as a refactor smell.",
+        "Walk through a concrete example with your own classes: 07's second interviewer (cookie) valued this; forcing yourself to represent /data/file=5 then /data/file/file2=6 in your objects is what exposes that File is unnecessary."
+      ],
+      "extensions": [
+        "'Now add a count of the total number of files under root, taking no arguments (all files from root).' DISCUSSION-ONLY in 06. Naive answer: DFS from root, sum children sizes — accepted. Intended better answer: add a parent pointer to each node and maintain a running fileCount that increments up the ancestor chain on insert (O(height) per write), so root always holds the total. A good answer states the naive one first, then reaches for the parent-pointer/running-count optimization.",
+        "'Now implement delete — remove a path recursively.' A good answer traverses to the parent of the target and drops the child (subtree GC'd naturally); notes recursion cleans up descendants for free.",
+        "'Now support linking paths together — cycles.' Introduce links so one path points at another node. A good answer recognizes the tree becomes a graph and adds cycle detection (visited set) so traversal terminates.",
+        "'Now support wildcard/glob reads like /*/file where * matches any single subdirectory (or any number).' A good answer branches traversal across all children matching the wildcard segment and collects results — preserves the single-node model, just fans out the walk.",
+        "Across all extensions the interviewer stresses: do NOT pre-optimize the base solution for these. Write the optimal solution for what's described, then adapt when the follow-up lands — the follow-up's answer depends on how you implemented the base."
+      ],
+      "commonMistakes": [
+        "Building an Entry→File/Folder class hierarchy instead of one node type — the central penalized mistake in BOTH sessions; interviewer repeatedly hinted 'there is no file/folder distinction' and candidates stayed fixated on File.",
+        "Working bottom-up from the node class instead of top-down from the read/write signatures, leading to a foggy, help-dependent implementation and poor time awareness (06's candidate self-identified this).",
+        "Not walking through a concrete example (/data/file=5 then /data/file/file2=6) with their own objects, so they never discovered File was redundant.",
+        "Using a list for children and looping to find a match, then putting node-creation INSIDE the loop — causes creating a new folder on the first non-matching child instead of after scanning all children. Fix: scan for existence first (containsKey), decide create-or-traverse AFTER the loop; or use a map.",
+        "Forgetting to break out of the child-search loop once a match is found, so iteration continues and wrongly creates folders.",
+        "Forgetting to actually attach a newly created folder to its parent's children (and to advance the current pointer) — 07 needed a nudge for both.",
+        "Duplicating the entire traversal in read and write instead of extracting a shared getNode helper (interviewer explicitly coached the stub-a-helper-with-a-TODO technique).",
+        "Not knowing map idioms — containsKey / getOrDefault (Java) — and hand-rolling existence checks; flagged as a language-fluency perception hit.",
+        "Declaring a helper variable (e.g. 'subfolder') and never using it — interviewer noted that unused variable was itself a hint the approach was off.",
+        "Fixating on the value/content type or input validation, which the interviewer explicitly declared irrelevant."
+      ],
+      "skeleton": "// Single node type — the composite. No File/Folder subclasses.\nclass Node {\npublic:\n    std::optional<int> value;                 // set only on value-bearing paths\n    std::unordered_map<std::string, Node*> children;\n};\n\nclass FileSystem {\npublic:\n    FileSystem() : root(new Node()) {}        // root always exists, unnamed\n\n    void writeFile(const std::string& path, int value);   // getOrCreate each segment, set value on last\n    int  readFile(const std::string& path);               // walk; return -1 if any segment missing\n\nprivate:\n    Node* root;\n    std::vector<std::string> split(const std::string& path);   // on '/'\n    Node* getNode(const std::string& path, bool create);       // shared by read & write\n};\n\n// --- Extension sketches (discussion) ---\n// count-all-files: give Node a `Node* parent` and keep a running `fileCount`;\n//                  on insert, walk parents incrementing — root holds the total (O(height)).\n// delete: getNode(parent).children.erase(lastSegment);  // subtree freed recursively\n// links + cycles: Node may reference another Node; traversal keeps a visited-set.\n// glob '/*/file': when a segment is '*', fan the walk across all matching children."
+    }
+  },
+  {
+    "id": "oop-currency-exchange",
+    "title": "Currency Exchange",
+    "difficulty": "medium",
+    "asks": "Design a currency exchange that stores directional conversion rates and converts an amount from one currency to another, extending to chained conversions.",
+    "patterns": [
+      "Model as a directed weighted graph (currencies = nodes, rates = directional edges, adjacency map)",
+      "API-signature-first: pin method signatures as the requirements gate before writing any implementation",
+      "Extract withheld requirements by asking (relationships, defaults, existence semantics) rather than assuming",
+      "Encapsulation / helper placement: mutating logic (deposit, withdraw, edge creation) lives on the class that owns the data",
+      "Avoid composite string/tuple keys that force O(n) scans; index so lookups stay O(1)",
+      "Reverse edge = 1 / rate; derive rather than store redundantly",
+      "Hint responsiveness: treat 'do you really want to do that?' as a redirect, not a challenge to defend"
+    ],
+    "prompt": "We're going to design a currency exchange. You'll write a class that supports adding a conversion — a from-currency, a to-currency, and a rate — deleting one, and converting a given amount from one currency to another. I'll give the problem verbally and it may not be complete, so ask as needed. How do you want to represent this?",
+    "brief": {
+      "requirements": [
+        "add(from, to, rate): register a directional conversion rate between two currencies; the rate is supplied at add time, not at convert time",
+        "remove/delete(from, to): remove a currency pair / conversion from the exchange",
+        "convert(from, to, amount): return amount converted using the stored rate(s)",
+        "Conversions are bidirectional in value: if from->to exists at rate r, the reverse to->from is 1/r — the candidate must decide whether to store both edges or derive on the fly",
+        "Transitive conversion: convert may be called on a pair with no direct rate (e.g. CAD->USD and USD->JPY exist, so CAD->JPY must be reachable) WITHOUT adding any new stored edge — this is the withheld escalation the interviewer reveals only after the direct case works",
+        "The interviewer deliberately withholds: whether convert can reference indirectly-linked currencies (yes), whether adding a pair that already exists should replace it (must be asked, not assumed), and the numeric type of the rate (float/double — must be justified not assumed)",
+        "In the bank-framed variant: the user/account/bank relationship is withheld and MUST be asked before designing — a user has exactly one account per currency, one account belongs to one user, one currency is uniquely identified by a string",
+        "Base-currency normalization variant: one anchor currency (e.g. CAD) is always valid; add(newCurrency) supplies only newCurrency->CAD, and every other rate for the new currency must be derived from the existing CAD-relative rates plus the reverse rates"
+      ],
+      "entities": [
+        "CurrencyExchange / Bank: owns the rate store; exposes add, remove, convert (and addCurrency in the base-anchor variant)",
+        "Currency: identified by a string code (candidate should state the 'string uniquely identifies a currency' assumption explicitly)",
+        "Rate/Edge: a directional weighted edge from one currency to another; reverse is 1/weight",
+        "Graph model: adjacency map { from -> { to -> rate } } so a direct lookup is O(1) and a chained lookup is a BFS/DFS over nodes",
+        "Bank-variant only — User: has id, holds accounts keyed by currency, knows its bank",
+        "Bank-variant only — Account: holds owning user, currency code, and balance amount; owns deposit(amount) and withdraw(amount) (which handle lazy account/edge creation)"
+      ],
+      "interfaces": [
+        "class CurrencyExchange { void add(string from, string to, double rate); void remove(string from, string to); double convert(string from, string to, double amount); }",
+        "Internal store: unordered_map<string, unordered_map<string,double>> adjacency — NOT a single map keyed by a concatenated/tuple 'from,to' string",
+        "convert direct case: look up adjacency[from][to]; chained case: BFS/DFS from `from` to `to` multiplying rates along the path, no new edges written",
+        "Bank variant — User: exchange(string fromCur, string toCur, double amount); Account: deposit(double amount); withdraw(double amount)",
+        "Base-anchor variant — Bank: addCurrency(string newCur, double rateToBase): store newCur->base and base->newCur (1/rate), then for every existing base->X derive newCur->X = rateToBase * (base->X) and its reverse",
+        "The interviewer treats writing these signatures — names, parameters, AND return types — as the requirements checkpoint; return types must be stated, not left implicit"
+      ],
+      "patternNotes": [
+        "Directed weighted graph + adjacency map is THE expected model; a candidate who names 'this is a graph problem' unprompted is giving the strongest signal. In transcript 08 the candidate DID say it, then drifted back to matrix/list-of-lists thrashing — naming it is necessary but you must then commit to adjacency list.",
+        "API-signature-first: both interviewers steered the candidate to write method signatures before logic. Pinning add/remove/convert (with return types) up front is the gate; diving into implementation first is the central criticism.",
+        "Asking for withheld requirements (replace-vs-error on duplicate add, indirect-conversion allowed, rate type, user/account/bank relationship) is an explicit skill check — the transcript-02 interviewer says asking the relationship question BEFORE typing signals design foresight; not asking signals you don't know what you're doing.",
+        "Encapsulation: transcript 02 penalized putting deposit/withdraw/lazy-creation logic in the caller — the fix was moving it into Account so callers don't re-check existence. Helpers belong on the class that owns the data.",
+        "Composite keys: keying the map by 'CAD,USD' strings forces iterating every key with startsWith to find related pairs → O(n^2). Nesting the map (from -> {to -> rate}) keeps lookups O(1). This was called out explicitly.",
+        "Hint resistance is the single biggest negative in transcript 08: the interviewer's 'do you really think you should be doing that?' was a redirect, and the candidate defended/ignored it repeatedly. Treating soft hints as course-corrections is a graded behavior."
+      ],
+      "extensions": [
+        "Now support conversion between two currencies that have NO direct rate — e.g. CAD->USD and USD->JPY are added, convert CAD->JPY. A good answer does a graph traversal (BFS/DFS) multiplying rates along the path and adds NO new stored edges (the interviewer explicitly forbids adding edges to resolve the path).",
+        "Now handle the reverse direction: adding from->to should make to->from convertible at 1/rate. A good answer either stores the reverse edge at add time or derives it in convert — and states which, rather than writing bespoke reverse logic.",
+        "Now change how rates enter the system (base-currency variant): there's an anchor currency (CAD) that always exists; addCurrency(newCur, rateToCAD) gives only the new currency's rate to CAD. A good answer derives every other rate for the new currency from existing CAD-relative rates and adds both the derived edges and their reverses, keeping all currencies mutually convertible.",
+        "Now implement remove(from, to): a good answer deletes both directional entries for that pair and reasons about whether previously-derived transitive links need cleanup (in the no-extra-edges model, they don't, because paths are computed at query time)."
+      ],
+      "commonMistakes": [
+        "Jumping straight into code/data structures before pinning down the method signatures and requirements — the primary criticism in both sessions.",
+        "Not asking the withheld questions: assuming a duplicate add should replace (transcript 08 assumed replace; interviewer wanted it discussed — multiple exchanges could carry different rates), assuming the rate type, and in transcript 02 failing to ask the user/account/bank relationship before designing.",
+        "Using a composite/concatenated key ('from,to' or a tuple) for the rate map, then being forced into an O(n^2) startsWith scan to find related pairs — should use a nested adjacency map.",
+        "Resisting hints: when the interviewer says 'do you really want to do that?' / 'slow down, are you over-complicating this?', defending the current approach or drifting instead of course-correcting (the flagged #1 negative in transcript 08).",
+        "Naming the graph model correctly ('nodes, directional edges, adjacency list') then abandoning it to thrash between a matrix and a list-of-lists without justifying either.",
+        "Putting mutation/existence-check logic in the caller (request-exchange) instead of encapsulating deposit/withdraw and lazy creation inside Account; also creating a from-account unconditionally when a missing from-account should be an error.",
+        "Lazy-creating an account for the from-currency 'on demand' — but the from account must already exist to withdraw, so the on-demand logic only makes sense for the to-currency.",
+        "Talking to oneself instead of narrating intent; making unforced assumptions (float vs double) without stating them; using placeholder names like string1/string2; Googling language syntax (how to write a constructor) without asking permission and while under-familiar with the chosen language."
+      ],
+      "skeleton": "// Core graph-modeled variant\nclass CurrencyExchange {\npublic:\n  void add(const std::string& from, const std::string& to, double rate);   // stores from->to = rate and to->from = 1/rate\n  void remove(const std::string& from, const std::string& to);             // erase both directions\n  double convert(const std::string& from, const std::string& to, double amount) const; // direct lookup, else BFS/DFS path-product\nprivate:\n  std::unordered_map<std::string, std::unordered_map<std::string,double>> adj_; // from -> { to -> rate }\n  bool findPath(const std::string& from, const std::string& to, double& outRate) const; // multiply rates along path\n};\n\n// Bank / base-anchor variant\nclass Account {\npublic:\n  void deposit(double amount);   // owns lazy-create + balance mutation\n  void withdraw(double amount);\nprivate:\n  User* owner_; std::string currency_; double balance_ = 0.0;\n};\n\nclass User {\npublic:\n  double exchange(const std::string& fromCur, const std::string& toCur, double amount); // withdraw, apply rate, deposit\nprivate:\n  std::string id_;\n  std::unordered_map<std::string, Account> accounts_; // one per currency\n  Bank* bank_;\n};\n\nclass Bank {\npublic:\n  void addCurrency(const std::string& newCur, double rateToBase); // derive all other rates from base, add reverses\n  double rate(const std::string& from, const std::string& to) const;\nprivate:\n  std::unordered_map<std::string, std::unordered_map<std::string,double>> rates_;\n  std::unordered_map<std::string, User*> usersById_;\n  const std::string base_ = \"CAD\";\n};"
+    }
+  },
+  {
+    "id": "oop-smart-recipe",
+    "title": "Smart Recipe / Fridge App",
+    "difficulty": "medium",
+    "asks": "Model recipes (ingredients-in, one product-out) and a fridge inventory, then implement a check that says whether a given recipe can be cooked — including recursive sub-recipes.",
+    "patterns": [
+      "Encapsulation / high cohesion (fridge logic lives in the Fridge class)",
+      "Promote primitive maps to domain classes (Recipe, Ingredient, Fridge, App)",
+      "Recursion over a dependency graph (reuse check() recursively rather than reaching for toposort)",
+      "Single Responsibility / low coupling",
+      "Map keyed by identity you actually look up by (recipe name -> Recipe), not iterated linearly",
+      "Constructor-time precomputation vs lazy computation (time/space tradeoff)"
+    ],
+    "prompt": "We're designing a smart recipe app. It knows the recipes — a recipe is just some input ingredients that produce one output product — and it's connected to a smart fridge that knows what ingredients you have and how many. First model this, then let's talk about whether a user can cook a given recipe.",
+    "brief": {
+      "requirements": [
+        "Model an inventory/fridge: ingredient name -> quantity (integer counts).",
+        "Model recipes: a recipe is a set of (ingredient, quantity) inputs mapping to exactly ONE output product. It is NOT a process/steps — purely input set -> output.",
+        "Model the App itself: it owns a Fridge instance AND a set of recipes. Candidates in the transcript repeatedly forgot to model the app/container object — the interviewer had to prompt for it.",
+        "add(ingredient, quantity) and remove(ingredient, quantity) on the fridge; default quantity 1 is acceptable if asked. Removing more than you have is an ERROR/invalid op, not a clamp-to-zero (interviewer explicitly said return an error).",
+        "check(recipe) / canCook(recipe): return boolean — do we have enough ingredients to cook it? (WITHDRAWN/withheld initially: the interviewer opens vague and only later reveals the real high-level goal is 'given the inventory, can this recipe be made / recommend a recipe'. Candidate must extract the use case before choosing the data model — the fridge-transcript candidate designed the map backwards because they never asked what it was for.)",
+        "recommendRecipe() (fridge transcript only): return ANY one valid cookable recipe; if several are valid, just output one.",
+        "A given output can be produced by MANY different input combinations (e.g. 2 tomato + 2 potato -> fries, OR 1 ketchup + 2 potato -> fries). The model must allow duplicate output products across different recipes — so output must NOT be used as a unique map key.",
+        "THE CORE HIDDEN REQUIREMENT (revealed as an escalation): an ingredient of a recipe can itself be a recipe (sub-recipe). check() must succeed if a missing ingredient can itself be produced from what's in the fridge. Quantities must propagate (need N of a sub-product -> need N times its inputs)."
+      ],
+      "entities": [
+        "Ingredient — just a name (string wrapper). Interviewer's verdict: DON'T make it a class yet because it carries no other data; but recognize it as the seam where you'd add a class the moment it gains attributes (e.g. calories).",
+        "Recipe — name + map/set of input (ingredientName -> quantity) + single output product. THE key modeling point: recipe MUST be a class, not a raw map or a string. Interviewer hammered this.",
+        "Fridge — owns inventory map (ingredientName -> quantity); owns add/remove and the 'have enough of X' helper. High cohesion: all fridge logic lives here, not in the app.",
+        "RecipeApp — owns the Fridge and the recipes collection (map recipeName -> Recipe); hosts check()/canCook() and recommendRecipe().",
+        "(Conceptually) the recipes + sub-recipes form a directed dependency graph; the goal 'can I reach this product from base ingredients' is a traversal/recursion."
+      ],
+      "interfaces": [
+        "class Fridge { void add(string name, int qty); void remove(string name, int qty); // error if qty > have  bool hasEnough(string name, int qty); }",
+        "class Recipe { string name; map<string,int> inputs; string output; }",
+        "class RecipeApp { Fridge fridge; map<string,Recipe> recipes; bool check(string recipeName); bool canCook(Recipe r); Recipe recommendRecipe(); }",
+        "check signature MUST take a recipe (name or Recipe), returns bool. The recursion is: canCook(r) = for each (item,qty) in r.inputs: fridge has qty of item, OR item is itself a recipe and canCook(recipes[item]) scaled by qty. Interviewers treated pinning these signatures down as the gate before any implementation."
+      ],
+      "patternNotes": [
+        "Recipe-as-class: promoting the raw map to a Recipe class is the primary positive signal. Missing it (keeping map<tuple,string> or map<string,list>) signals weak data-modeling. Interviewer: 'if you have a map of name->properties, that IS a class.'",
+        "Fridge cohesion: putting hasEnough / inventory inside Fridge (not inline in the App) is explicitly praised as avoiding coupling. Strong candidates locate fridge logic in Fridge.",
+        "Map used correctly: key the recipes map by the thing you look up (recipe name), then recipes[name] — NOT iterate the whole map checking value==target. Iterating a hashmap to find a value is the tell of a wrong key choice (interviewer's exact critique).",
+        "Recursion vs toposort: the elegant answer REUSES check()/canCook() recursively on sub-recipes. Reaching for topological sort is over-engineering here; recursion (DFS-style) is the intended intuition. Recognize the 'goal / ways to reach goal / ways to reach those' structure = graph traversal.",
+        "Constructor-precompute vs lazy: an advanced-signal tradeoff — expand sub-recipes into base ingredients once in the Recipe constructor (O(T) per recipe, good when you check often) vs. expand lazily inside check (O(T) per check, good when recipes are added often but rarely checked). Being able to articulate this = senior signal.",
+        "Don't-classify-every-noun: NOT making Ingredient a class (because it's attribute-less) is the correct call and shows judgment; but flag it as the future seam (calories extension)."
+      ],
+      "extensions": [
+        "'A recipe's ingredient can itself be a recipe' — e.g. pasta needs noodle + tomato-sauce, and tomato-sauce is itself a recipe (tomato + salt). Fridge has noodle, tomato, salt but NO tomato-sauce. check(pasta) must return true. GOOD ANSWER: make check/canCook recurse — if an input isn't a raw ingredient, look it up in the recipes map and recurse; reuse the same function, don't write a parallel one. Preserve the boolean contract.",
+        "'Now the sub-recipe needs quantities / ratios' — need 10 of the sub-product, or the sub-recipe yields 3 per 5 inputs, so you must scale by a ratio when recursing (need ceil(required/yield) batches). Good answer keeps the recursion but threads a required-quantity parameter and multiplies through; doesn't hardcode qty==1.",
+        "'One output, many input combinations' — French fries via (2 tomato+2 potato) OR (1 ketchup+2 potato). A good model stores these as separate Recipe objects sharing an output; check must return true if ANY combination is satisfiable. Beware returning false after the first unsatisfiable combination — must try alternatives.",
+        "'Where do you break down sub-recipes — constructor or check?' Pure analysis follow-up: articulate the time-complexity tradeoff (precompute base-ingredient expansion in the Recipe constructor vs. expand lazily per check). Good answer ties the choice to workload (write-heavy add-recipes -> lazy in check; read-heavy checking -> precompute in constructor).",
+        "'What if ingredients had attributes like calories?' (recipe-transcript, unasked but flagged) — the string-ingredient model can't answer 'total calories of a dish'. Good answer: acknowledge Ingredient becomes a class at that point; the current string is a deliberate, revisitable choice.",
+        "Shared-inventory consumption during recursion (raised in fridge transcript): if cooking the parent consumes ingredients that the sub-recipe also needs, quantities must be accounted for so the same unit isn't double-counted."
+      ],
+      "commonMistakes": [
+        "Never asking what the model is FOR before designing it — then choosing the map direction wrong (output -> inputs) because the use case was unknown. Interviewer: 'what are we designing the classes for?' should be top of mind.",
+        "Keeping recipes as raw maps/strings instead of a Recipe class; struggling to use a list/tuple of ingredients as a hashmap key instead of just making a class.",
+        "Mapping output-product -> inputs (backwards) or otherwise picking a key you then have to linearly scan for; iterating a hashmap looking for value==target (misuse of a map).",
+        "Using output product as a unique key, so duplicate recipes for the same product silently collide/overwrite ('never duplicate that' — candidate hadn't considered two recipes make the same thing).",
+        "Only checking 'one layer down' — returning false when a required ingredient is missing, without checking whether that ingredient is itself a producible sub-recipe. Failing to recognize the graph-traversal pattern.",
+        "Returning false on the first unsatisfiable input combination for a multi-combo output instead of trying the other combinations.",
+        "Forgetting to model the App/container that owns both the fridge and the recipe set (interviewer repeatedly had to prompt 'we're still missing the app itself').",
+        "Putting fridge/inventory logic inline in the app instead of in a Fridge class (coupling).",
+        "remove(): clamping to zero or ignoring over-removal instead of treating qty>have as an error; forgetting the else branch so the error path also mutates state.",
+        "Scrambling to write code before drawing an example — the graph/tree that reveals the recursion should be on the page early, not in the final minutes.",
+        "Assuming quantity is always 1 and not thinking about ratios when sub-recipes yield multiple units."
+      ],
+      "skeleton": "// Ingredient stays a bare string until it gains attributes (e.g. calories).\n// using IngredientName = std::string;\n\nclass Recipe {\npublic:\n    std::string name;\n    std::string output;                 // one product out\n    std::unordered_map<std::string,int> inputs; // ingredientOrSubRecipeName -> qty\n    // Optional precompute: expand sub-recipes to base ingredients here\n    // Recipe(name, output, rawInputs, const std::unordered_map<std::string,Recipe>& universe);\n};\n\nclass Fridge {\n    std::unordered_map<std::string,int> inventory; // name -> qty\npublic:\n    void add(const std::string& name, int qty = 1);\n    void remove(const std::string& name, int qty = 1); // error if qty > inventory[name]\n    bool hasEnough(const std::string& name, int qty) const;\n};\n\nclass RecipeApp {\n    Fridge fridge;\n    std::unordered_map<std::string,Recipe> recipes; // recipeName -> Recipe\npublic:\n    bool check(const std::string& recipeName) { return canCook(recipes.at(recipeName), 1); }\n\n    // required = how many of this product we need (ratio propagation)\n    bool canCook(const Recipe& r, int required) {\n        for (auto& [item, qty] : r.inputs) {\n            int need = qty * required;\n            if (fridge.hasEnough(item, need)) continue;      // base ingredient path\n            auto it = recipes.find(item);\n            if (it != recipes.end() && canCook(it->second, need)) continue; // sub-recipe path\n            return false;                                    // (try alt combos before giving up)\n        }\n        return true;\n    }\n\n    Recipe recommendRecipe(); // return any one valid cookable recipe\n};"
+    }
+  },
+  {
+    "id": "oop-cache-ttl",
+    "title": "In-Memory Cache with Per-Key TTL",
+    "difficulty": "hard",
+    "asks": "Design an in-memory key-value cache where each key has a time-to-live, then evolve expiry from synchronous-on-every-op to an asynchronous scheduled cleanup thread.",
+    "patterns": [
+      "Composition (dict + min-heap) over a single structure",
+      "Lazy vs. eager expiration trade-off",
+      "Encapsulation of time source (never trust a caller-supplied 'now')",
+      "Concurrency: single mutex guarding all mutations, re-entrant-lock/deadlock avoidance",
+      "Sliding-scale consistency-vs-latency (tunable cleanup frequency)",
+      "Per-read validation once the 'data always valid' invariant is dropped",
+      "Stale-entry invalidation via TTL-stamp matching on heap pop"
+    ],
+    "prompt": "Design an in-memory key-value store with a time-to-live attribute for caching. Here's a basic API and some basic requirements — put, get, delete, contains_key, each key lives for a TTL in seconds. Start by implementing these, then we'll come back and refine.",
+    "brief": {
+      "requirements": [
+        "Support put(key, value, ttl_seconds), get(key), delete(key), contains_key(key). The interviewer hands over a deliberately thin API and says 'let me know what you think' — the candidate must clarify the rest.",
+        "get on an expired/missing key throws/errors; delete on an expired or non-existent key is a no-op (does NOT throw) — the candidate must propose these behaviors, they are not stated.",
+        "contains_key returns a boolean; an expired key must read as absent (false), i.e. expired-but-not-yet-swept is treated identically to never-existed.",
+        "TTL semantics deliberately left vague: interviewer asks point-blank 'what is a time to live — is it a number?' The candidate must land on: ttl is a duration in seconds, and the stored value is an absolute expiry = now + ttl.",
+        "Time must be internally sourced (the cache calls time.time()/std::chrono itself). Interviewer explicitly rejects passing 'now' as a parameter to get — 'otherwise it could be spoofed.' This is a withheld requirement surfaced as a correction.",
+        "put on an existing key overwrites value AND resets the TTL — the old expiry entry must not later evict the fresh value (the stale-entry-on-overwrite bug).",
+        "get/put must be fast — get is the hot path. Expiry bookkeeping must not force an O(n) scan of the whole store on the common path.",
+        "Eventually the store must NOT block every operation on a full expiry sweep — cleanup should be movable to an asynchronous schedule while keeping reads correct."
+      ],
+      "entities": [
+        "Cache/TTLCache — owns the store, the expiry index, the clock, and (later) the lock + cleanup thread.",
+        "Store: hash map key -> (value, expiry) — the source of truth for current values.",
+        "ExpiryEntry: (expiry_time, key) ordered by expiry_time — the heap payload; MUST also carry the expiry it was created with so a pop can be matched against the store's current expiry.",
+        "MinHeap/PriorityQueue of ExpiryEntry — gives O(log n) insert and O(log n) removal of the soonest-to-expire, avoiding the O(n) shift of a sorted list/array.",
+        "CleanupThread (async regime): runs the sweep on a fixed interval (e.g. 60s).",
+        "Mutex/Lock: one lock serializing every mutation of store+heap so the async sweep never races a put/get/delete."
+      ],
+      "interfaces": [
+        "void put(Key k, Value v, int ttlSeconds) — computes expiry = now()+ttl, overwrites store[k], pushes (expiry,k) onto heap. The interviewer treats writing these four signatures as the requirements gate: pin down return types and error behavior BEFORE coding.",
+        "Value get(Key k) — validates freshness at read time and throws/errors if absent-or-expired; takes NO time parameter (clock is internal).",
+        "void delete(Key k) — no-op if absent/expired.",
+        "bool contains_key(Key k) — false for absent or expired.",
+        "private void deleteExpired() / sweep() — while heap non-empty: peek soonest; if its expiry > now, break; pop it; if key still in store AND store[key].expiry == popped.expiry AND expired, erase from store (the TTL-match guards against evicting a value that was overwritten with a new TTL).",
+        "private bool isExpired(entry, now) — the single cheap per-key check (compare two floats) that becomes mandatory once cleanup is async.",
+        "shutdown()/join() — stop and join the cleanup thread on teardown (bonus signal the interviewer explicitly praised)."
+      ],
+      "patternNotes": [
+        "dict + min-heap composition: the intended structure. Candidate first proposed a plain/sorted list; interviewer probed 'why a list? is there a structure giving log-n search, insert AND delete?' — heap (or any balanced tree) is the answer. Reaching for a single sorted array signals weak structure-selection.",
+        "Internal clock / no caller-supplied now: choosing to source time inside get is the encapsulation-and-security signal ('could be spoofed').",
+        "TTL-stamp match on pop: storing the TTL/expiry alongside the value and comparing it when popping is THE senior move that fixes the overwrite bug without O(n) heap surgery. Missing it = stale entry silently deletes a live key.",
+        "Single lock around the whole critical section: all four ops mutate the shared 'database'; they must be mutually exclusive with the async sweep. Using one coarse lock is correct here; the signal is placing it correctly, not fine-grained locking.",
+        "Re-entrant deadlock trap: if sweep() itself is wrapped by the lock AND delete()/contains() also call sweep() while already holding the lock, the inner acquire never returns. Fix: stop calling sweep() inside the per-op path once it's async. Interviewer said a student is EXPECTED to locate this deadlock even without knowing lock syntax.",
+        "Per-read validation after going async: async cleanup breaks the 'data is always valid' invariant, so get/contains must re-check the single key's expiry at read time. Recognizing that the correctness guarantee moved from 'state always clean' to 'validate on demand' is the key conceptual signal.",
+        "Sliding-scale trade-off: cleanup frequency is a tunable knob — higher frequency = higher average load but more point-in-time consistency; lower = less load but more reliance on cheap per-key validation. Framing consistency-vs-latency/space as tunable (not binary) is what the interviewer was steering toward.",
+        "Threads not required to be syntactically perfect: interviewer explicitly accepts pseudo-code for threading; the signal is knowing WHERE the lock goes and WHY, plus join-on-shutdown, not memorized API."
+      ],
+      "extensions": [
+        "Now change synchronous cleanup to asynchronous: 'this scan might be very slow in a distributed/real system — run deleteExpired on a schedule instead of on every op.' A good answer moves the sweep to a background thread on a fixed interval and immediately flags the risks it introduces.",
+        "Now add a lock so ops don't race the async sweep: assume callers block until the running cleanup finishes, then proceed. Good answer: one mutex, whole critical section guarded, with-scope acquire/release.",
+        "Now spot and fix the deadlock: because delete()/contains() previously called sweep() internally, and sweep() is now lock-guarded, an op that holds the lock and then calls sweep() self-deadlocks. Good answer: remove the internal sweep call from the per-op path so ops no longer depend on re-acquiring the lock.",
+        "Now fix reads after going async: since the sweep runs only every N seconds, a key can be expired-but-not-yet-swept; get/contains must validate that single key's expiry at read time rather than trusting store state. Good answer changes contains/get to do the cheap per-key check.",
+        "Bonus — refresh/extend an existing key's TTL: a re-put with a new TTL should supersede the old expiry. Good answer notes the overwrite-plus-TTL-match design already handles this (old heap entry is ignored on pop because expiries don't match).",
+        "Bonus — expiry callback: put(key, value, ttl, callback); callback must fire AT expiry time, not at the next 60s sweep. Good answer: a plain fixed-interval thread is insufficient; use a scheduled executor / timer so the callback fires precisely when the key expires.",
+        "Bonus — hit/miss statistics: track and expose cache hit/miss ratio counters (a classic LRU-cache-style follow-up), incremented on get/contains."
+      ],
+      "commonMistakes": [
+        "Fixating on a 'sorted list' and repeatedly justifying it, when the real need (log-n search + insert + delete) points to a heap or tree — and conflating 'sorted structure' with 'list' in communication.",
+        "Treating TTL as a raw timestamp instead of clarifying it's a duration; not asking 'what value goes in the heap node' (should be absolute expiry = now + ttl).",
+        "Overwriting a key's value on put but forgetting the stale old expiry still sits in the heap — later evicting the fresh value. (Candidate caught it only after the interviewer asked 'what about the old time to live?')",
+        "When popping the heap, not handling the case where the key was already deleted from the store — the heap must still be popped to stay in sync ('if the key is not in the dictionary body, you still pop it off the heap').",
+        "Getting lost in tangled control flow in deleteExpired — overlapping conditions, missing else branch, unclear when to break vs continue — instead of writing a simple version first and refactoring after.",
+        "Reaching for JavaScript-style 'async' keyword for background work in Python instead of threads; not being fluent that a background worker needs a real thread + lock.",
+        "The re-entrant deadlock: leaving the internal sweep() call inside a lock-guarded op so it tries to re-acquire a held lock.",
+        "After going async, still assuming stored data is always valid — forgetting reads must now validate per-key freshness.",
+        "Not zooming out at the start to the object's lifecycle (init -> put/get/contains/delete -> shutdown); the interviewer noted that asking 'when do I do cleanup?' up front would have produced cleaner code and possibly removed the need for the heap entirely.",
+        "Not verbally shouting out alternative strategies (e.g. 'I considered an async solution but I'm shaky on threads') — silence hides the candidate's true level from the interviewer.",
+        "Forgetting thread teardown — no join/shutdown to clean up the background thread (interviewer flagged join-on-main as a strong positive that was missing)."
+      ],
+      "skeleton": "// Synchronous baseline, then async regime noted inline.\n#include <string>\n#include <unordered_map>\n#include <queue>\n#include <vector>\n#include <chrono>\n#include <mutex>\n#include <thread>\n#include <atomic>\n#include <stdexcept>\n#include <functional>\n\nusing Key = std::string;\nusing Value = std::string;\n\nclass TTLCache {\npublic:\n    explicit TTLCache(int cleanupIntervalSec = 60); // starts cleanup thread\n    ~TTLCache();                                    // shutdown(): stop + join\n\n    void put(const Key& k, const Value& v, int ttlSeconds);\n    Value get(const Key& k);          // no time param; validates freshness; throws if absent/expired\n    void erase(const Key& k);         // no-op if absent/expired\n    bool containsKey(const Key& k);   // false if absent or expired\n\n    // bonus follow-ups\n    void putWithCallback(const Key& k, const Value& v, int ttlSeconds,\n                         std::function<void(const Key&)> onExpire); // needs scheduled executor, not 60s sweep\n    double hitMissRatio() const;\n\nprivate:\n    struct Entry { Value value; double expiry; };            // stored value + its absolute expiry\n    struct HeapItem { double expiry; Key key; };             // heap payload carries the TTL stamp\n    struct Later { bool operator()(const HeapItem& a, const HeapItem& b) const { return a.expiry > b.expiry; } };\n\n    static double now();                                     // internal clock — never caller-supplied\n    bool isExpired(const Entry& e, double t) const { return e.expiry <= t; } // the cheap per-key check\n    void deleteExpired();  // sweep: pop soonest; break if not yet due; erase from store only if key present AND store[k].expiry == popped.expiry\n    void cleanupLoop();    // runs deleteExpired() every interval_ seconds under lock_\n\n    std::unordered_map<Key, Entry> store_;\n    std::priority_queue<HeapItem, std::vector<HeapItem>, Later> heap_;\n    std::mutex lock_;      // one lock guards ALL mutations; sweep NOT called from per-op path (deadlock fix)\n    std::thread cleanup_;\n    std::atomic<bool> running_{false};\n    int interval_;\n    long hits_ = 0, misses_ = 0;\n};"
+    }
   }
 ];
 
