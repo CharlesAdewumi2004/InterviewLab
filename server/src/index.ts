@@ -72,6 +72,13 @@ function toClientProblem(p: ServerProblem): ClientProblem {
 const DETACHED_TTL_MS = 60 * 60_000;
 const detached = new Map<string, { store: SessionStore; timer: NodeJS.Timeout }>();
 
+// Every store with a live socket, so shutdown can flush them. Without this a
+// `tsx watch` restart (SIGTERM) dropped the process with the newest buffer
+// only in memory: the reconnect then found no file, answered resumed=false,
+// and the client replaced the candidate's code with the default buffer.
+const liveStores = new Set<SessionStore>();
+const liveClangd = new Set<ClangdSession>();
+
 function handleConnection(socket: WebSocket, request: IncomingMessage): void {
   const sid = new URL(request.url ?? '/', 'http://localhost').searchParams.get('sid');
   const held = sid ? detached.get(sid) : undefined;
@@ -85,6 +92,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
   const fromDisk = !held && sid ? SessionStore.fromDisk(sid) : null;
   let store = held ? held.store : (fromDisk ?? new SessionStore());
   const resumed = held !== undefined || fromDisk !== null;
+  liveStores.add(store);
   let chatBusy = false;
   let runBusy = false;
   let endBusy = false;
@@ -104,7 +112,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
   };
 
   // Sent at connect and again after a session:reset swaps the store.
-  const announceSession = (asResumed: boolean) => {
+  const announceSession = (asResumed: boolean, reason: 'connect' | 'language' | 'reset' = 'connect') => {
     const s = store.session;
     const lastPause = s.pauseSpans[s.pauseSpans.length - 1];
     const pausedNow = lastPause !== undefined && lastPause.to === null;
@@ -116,6 +124,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
       persona: s.persona,
       language: s.language,
       resumed: asResumed,
+      reason,
       startedAt: s.startedAt,
       problem: s.problem ? toClientProblem(s.problem) : null,
       buffer: s.buffer,
@@ -148,6 +157,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
   // Semantic autocomplete: boot clangd eagerly so the expensive first parse
   // of <bits/stdc++.h> happens now, not on the first keystroke.
   const clangd = new ClangdSession(store.session.buffer);
+  liveClangd.add(clangd);
   void clangd.ready().then((available) => send({ type: 'lsp:status', available }));
 
   async function handleChat(msg: Extract<ClientMessage, { type: 'chat:send' }>): Promise<void> {
@@ -461,7 +471,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         resetChat(); // the persona is told which language the candidate works in
         // Full snapshot back: the buffer may have swapped to the new
         // language's default, and the editor needs its syntax mode updated.
-        announceSession(false);
+        announceSession(false, 'language');
         break;
       case 'narration:segment':
         // Context + grading evidence only — never triggers a model call.
@@ -570,10 +580,12 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         // paused, like every session.
         store.save();
         const persona = store.session.persona;
+        liveStores.delete(store);
         store = new SessionStore();
+        liveStores.add(store);
         store.setPersona(persona);
         resetChat();
-        announceSession(false);
+        announceSession(false, 'reset');
         break;
       }
       case 'lsp:request':
@@ -591,6 +603,8 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
   socket.on('close', () => {
     chat.dispose();
     clangd.dispose();
+    liveClangd.delete(clangd);
+    liveStores.delete(store);
     store.save();
     // Park the session for resume instead of discarding it.
     const id = store.session.id;
@@ -697,3 +711,31 @@ await fastify.listen({ port: PORT, host: HOST });
 const wss = new WebSocketServer({ server: fastify.server, path: '/ws' });
 wss.on('connection', handleConnection);
 console.log(`practice-ide server listening on http://${HOST}:${PORT} (ws at /ws)`);
+
+// tsx watch restarts on every code change, and a dev machine sends SIGINT on
+// Ctrl-C: flush live sessions to disk so the reconnect resumes instead of
+// handing the client an empty session, and reap the clangd children (each
+// holds a ~400MB preamble) rather than orphaning them onto init.
+let shuttingDown = false;
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(signal, () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    for (const store of liveStores) {
+      try {
+        store.save();
+      } catch (err) {
+        console.error('shutdown save failed:', err);
+      }
+    }
+    for (const { store } of detached.values()) {
+      try {
+        store.save();
+      } catch {
+        // best effort
+      }
+    }
+    for (const session of liveClangd) session.dispose();
+    process.exit(0);
+  });
+}

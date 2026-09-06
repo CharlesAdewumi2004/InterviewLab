@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from 'react';
 import type { ClientProblem, DesignMeta, OopMeta, Persona, TechTopic } from '../../../shared/protocol';
 import TechQPane from './TechQPane';
 import OopBank from './OopBank';
+import { useApi } from '../hooks/useApi';
 
 interface Props {
   problem: ClientProblem | null;
@@ -16,6 +17,8 @@ interface Props {
   onTechStart: (topics: TechTopic[]) => void;
   onDebugPick: (id?: string) => void;
   onOopPick: (id?: string) => void;
+  /** Bumps when the server re-announces a session — refetch the banks then. */
+  sessionEpoch: number;
 }
 
 const DIFF_COLORS: Record<DesignMeta['difficulty'], string> = {
@@ -26,17 +29,21 @@ const DIFF_COLORS: Record<DesignMeta['difficulty'], string> = {
 
 // Sysdesign persona: the pane is a HelloInterview-style question bank —
 // pick a question (or randomize) and the interviewer states it in chat.
-function DesignBank({ designQuestion, onDesignPick }: { designQuestion: DesignMeta | null; onDesignPick: (id?: string) => void }) {
-  const [bank, setBank] = useState<DesignMeta[] | null>(null);
-  const [bankError, setBankError] = useState<string | null>(null);
+function DesignBank({
+  designQuestion,
+  onDesignPick,
+  sessionEpoch,
+}: {
+  designQuestion: DesignMeta | null;
+  onDesignPick: (id?: string) => void;
+  sessionEpoch: number;
+}) {
+  const { data, error: bankError, retry } = useApi<{ questions: DesignMeta[] }>(
+    '/api/design-questions',
+    sessionEpoch,
+  );
+  const bank = data?.questions ?? null;
   const [changing, setChanging] = useState(false);
-
-  useEffect(() => {
-    fetch('/api/design-questions')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((data: { questions: DesignMeta[] }) => setBank(data.questions))
-      .catch((err) => setBankError(err instanceof Error ? err.message : String(err)));
-  }, []);
 
   if (designQuestion && !changing) {
     return (
@@ -87,7 +94,14 @@ function DesignBank({ designQuestion, onDesignPick }: { designQuestion: DesignMe
           🎲 Random
         </button>
       </div>
-      {bankError && <div className="rounded bg-red-900/40 px-2 py-1 text-xs text-red-300">{bankError}</div>}
+      {bankError && (
+        <div className="flex items-center justify-between gap-2 rounded bg-red-900/40 px-2 py-1 text-xs text-red-300">
+          <span>{bankError}</span>
+          <button onClick={retry} className="shrink-0 rounded bg-red-800/60 px-2 py-0.5 hover:bg-red-700/60">
+            Retry
+          </button>
+        </div>
+      )}
       {!bank && !bankError && <p className="text-xs text-neutral-500">Loading bank…</p>}
       {bank && (
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
@@ -143,6 +157,7 @@ export default memo(function ProblemPane({
   onTechStart,
   onDebugPick,
   onOopPick,
+  sessionEpoch,
 }: Props) {
   const [raw, setRaw] = useState('');
   const [delivery, setDelivery] = useState<'text' | 'oral'>('text');
@@ -179,10 +194,10 @@ export default memo(function ProblemPane({
   }
 
   if (persona === 'sysdesign') {
-    return <DesignBank designQuestion={designQuestion} onDesignPick={onDesignPick} />;
+    return <DesignBank designQuestion={designQuestion} onDesignPick={onDesignPick} sessionEpoch={sessionEpoch} />;
   }
   if (persona === 'oopdesign') {
-    return <OopBank oopQuestion={oopQuestion} onOopPick={onOopPick} />;
+    return <OopBank oopQuestion={oopQuestion} onOopPick={onOopPick} sessionEpoch={sessionEpoch} />;
   }
   if (persona === 'techq') {
     return <TechQPane techTopics={techTopics} problem={problem} onTechStart={onTechStart} onDebugPick={onDebugPick} />;

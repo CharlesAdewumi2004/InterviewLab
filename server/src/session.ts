@@ -51,6 +51,10 @@ export class SessionStore {
   private lastTurnBuffer: string;
   private lastErrorSignature: string | null = null;
   private saveTimer: NodeJS.Timeout | null = null;
+  // Set once the candidate actually edits the buffer. Typing is the one form
+  // of work that produces no turn, run or problem, so without this a
+  // code-only session looks empty to hasActivity() and is never written.
+  private dirty = false;
 
   constructor() {
     const now = Date.now();
@@ -138,6 +142,7 @@ export class SessionStore {
   }
 
   updateEditor(buffer: string, selection: Selection | null, cursor: Cursor): void {
+    if (buffer !== this.session.buffer) this.dirty = true;
     this.session.buffer = buffer;
     this.session.selection = selection;
     this.session.cursor = cursor;
@@ -156,6 +161,7 @@ export class SessionStore {
     if (pristine) {
       this.session.buffer = DEFAULT_BUFFERS[language];
       this.lastTurnBuffer = this.session.buffer;
+      this.dirty = false; // swapping one untouched default for another isn't work
     }
   }
 
@@ -313,9 +319,17 @@ export class SessionStore {
   // A session where nothing happened (no problem, no conversation, no runs,
   // no narration) isn't worth a file — without this, every page load and dev
   // StrictMode remount persisted an empty session JSON.
+  //
+  // `dirty` is load-bearing: s.edits only accrues at chat-turn boundaries
+  // (recordEditBoundary), so a candidate who just writes code produces none of
+  // the other signals. Without it saveSoon() from editor:state scheduled a
+  // save that save() then discarded, no file was ever written, and every
+  // restart came back resumed=false — which makes the client replace the live
+  // buffer with the default. That is data loss, not just a missing feature.
   private hasActivity(): boolean {
     const s = this.session;
     return (
+      this.dirty ||
       s.turns.length > 0 ||
       s.runs.length > 0 ||
       s.problem !== null ||
@@ -326,6 +340,10 @@ export class SessionStore {
   }
 
   save(): void {
+    // Note the ordering: a pending saveSoon() is cancelled even if this call
+    // then bails on hasActivity(). That is only safe because `dirty` makes an
+    // edited buffer count as activity — otherwise an incidental save() from
+    // persona:set/language:set would silently swallow a scheduled editor save.
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;

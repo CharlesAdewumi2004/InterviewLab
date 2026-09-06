@@ -15,7 +15,7 @@ import type {
   Turn,
 } from '../../shared/protocol';
 import { rememberSessionId, useSocket } from './hooks/useSocket';
-import Editor, { type EditorApi, type EditorState } from './components/Editor';
+import Editor, { isPristineBuffer, type EditorApi, type EditorState } from './components/Editor';
 import ChatPane from './components/ChatPane';
 import ProblemPane from './components/ProblemPane';
 import Console from './components/Console';
@@ -44,6 +44,10 @@ export default function App() {
   const [streamText, setStreamText] = useState<string | null>(null);
   const [chatBusy, setChatBusy] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  // Set when a reconnect landed on a session the server could not resume while
+  // the editor held real work: the code was kept, but the clock and transcript
+  // belong to a new session, and the user should know rather than discover it.
+  const [sessionRecreated, setSessionRecreated] = useState(false);
 
   const [compiling, setCompiling] = useState(false);
   const [build, setBuild] = useState<BuildResult | null>(null);
@@ -122,12 +126,23 @@ export default function App() {
         const editor = editorApiRef.current;
         if (!editor) {
           pendingBufferRef.current = msg.buffer; // Monaco mounts later
-        } else if (msg.resumed) {
-          // Live reconnect: the editor may hold keystrokes newer than the
-          // server's debounced copy — the client is authoritative, push it.
-          sendRef.current({ type: 'editor:state', ...editor.getState() });
-        } else {
+        } else if (msg.reason !== 'connect') {
+          // Language toggle or explicit reset: the user asked the server to
+          // change the buffer, so the server's copy wins.
           editor.setValue(msg.buffer);
+        } else if (isPristineBuffer(editor.getState().buffer)) {
+          // Nothing typed yet — no work to lose, take the server snapshot.
+          editor.setValue(msg.buffer);
+        } else {
+          // A (re)connect with real code in the editor. The browser's buffer is
+          // by construction at least as new as anything the server holds (the
+          // server's copy is debounced), so the client is authoritative — push
+          // it up rather than overwriting it. Keying this on `reason` and not
+          // on `resumed` is deliberate: a server restart legitimately answers
+          // resumed=false, and the old code overwrote the candidate's live
+          // code with the default buffer every time that happened.
+          sendRef.current({ type: 'editor:state', ...editor.getState() });
+          if (!msg.resumed) setSessionRecreated(true);
         }
         break;
       }
@@ -510,6 +525,24 @@ export default function App() {
         </div>
       )}
 
+      {sessionRecreated && inWorkspace && (
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 border-b border-amber-800/60 bg-amber-950/60 px-3 py-1.5 text-xs text-amber-200"
+        >
+          <span>
+            The server restarted and this session could not be resumed — your code was kept, but the clock and
+            transcript started over.
+          </span>
+          <button
+            onClick={() => setSessionRecreated(false)}
+            className="shrink-0 rounded px-2 py-0.5 text-amber-300/80 hover:bg-amber-900/60 hover:text-amber-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* The workspace stays MOUNTED across navigation — Monaco's buffer and
           the live session must survive page switches — pages only toggle
           visibility. Design mode hides the console (whiteboard); behavioral
@@ -537,6 +570,7 @@ export default function App() {
               designQuestion={designQuestion}
               techTopics={techTopics}
               oopQuestion={oopQuestion}
+              sessionEpoch={sessionEpoch}
               onIntake={handleIntake}
               onDesignPick={handleDesignPick}
               onTechStart={handleTechStart}

@@ -340,6 +340,13 @@ export function setupMonaco(monaco: Monaco): void {
       }
 
       // Curated tier (clangd off, slow, or empty at this position).
+      // Every curated return is marked `incomplete` so Monaco re-invokes this
+      // provider on each subsequent character instead of locally filtering the
+      // list it already has. Without it, one curated answer at 'std::' is
+      // treated as exhaustive for the whole identifier, so the semantic tier
+      // can never take over mid-word once clangd warms up — and any symbol
+      // missing from the curated list (std::function among them) stays
+      // unreachable until the user retypes the line.
       const before = model.getLineContent(position.lineNumber).slice(0, word.startColumn - 1);
       const entryItems = (entries: Entry[]): languages.CompletionItem[] =>
         entries.map((e) => ({
@@ -352,11 +359,14 @@ export function setupMonaco(monaco: Monaco): void {
 
       // Member access: '.' or '->' (but not a float literal like "3.").
       if (/(?<![0-9])\.\s*$/.test(before) || /->\s*$/.test(before)) {
-        return { suggestions: entryItems(MEMBERS) };
+        return { suggestions: entryItems(MEMBERS), incomplete: true };
       }
       // Scope access ('std::', 'string::', …): STL symbols fit here too.
       if (/::\s*$/.test(before)) {
-        return { suggestions: entryItems(GLOBALS.concat(MEMBERS.filter((m) => m.label === 'npos'))) };
+        return {
+          suggestions: entryItems(GLOBALS.concat(MEMBERS.filter((m) => m.label === 'npos'))),
+          incomplete: true,
+        };
       }
 
       const keywords: languages.CompletionItem[] = KEYWORDS.map((k) => ({
@@ -373,7 +383,7 @@ export function setupMonaco(monaco: Monaco): void {
         insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
         range,
       }));
-      return { suggestions: [...entryItems(GLOBALS), ...keywords, ...snippets] };
+      return { suggestions: [...entryItems(GLOBALS), ...keywords, ...snippets], incomplete: true };
     },
   });
 

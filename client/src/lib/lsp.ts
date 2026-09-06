@@ -50,14 +50,30 @@ export function docString(doc: LspDoc): string | undefined {
   return typeof doc === 'string' ? doc : doc.value;
 }
 
-let sendFn: ((msg: ClientMessage) => void) | null = null;
+let sendFn: ((msg: ClientMessage) => boolean) | null = null;
 let available = false;
 let nextId = 1;
 const pending = new Map<number, { resolve: (r: unknown) => void; timer: number }>();
 
 /** Wire the app's socket send function (idempotent, survives reconnects). */
-export function bindLspSend(fn: (msg: ClientMessage) => void): void {
+export function bindLspSend(fn: (msg: ClientMessage) => boolean): void {
   sendFn = fn;
+}
+
+/**
+ * Socket went down: clangd lives per-connection, so nothing on the other end
+ * can answer until a new one is established and re-announces lsp:status.
+ * Without this, `available` stays true across the gap and every keystroke pays
+ * the full 2s timeout before falling back to the curated list — which is what
+ * made autocomplete feel dead-and-laggy for seconds after each server restart.
+ */
+export function resetLsp(): void {
+  available = false;
+  for (const p of pending.values()) {
+    clearTimeout(p.timer);
+    p.resolve(null);
+  }
+  pending.clear();
 }
 
 export function lspAvailable(): boolean {
@@ -102,6 +118,12 @@ export function lspQuery(
       resolve(null);
     }, timeoutMs);
     pending.set(id, { resolve, timer });
-    send({ type: 'lsp:request', id, kind, buffer, line, column });
+    // A socket that closed between the availability check and here would
+    // otherwise leave this promise hanging for the full timeout.
+    if (!send({ type: 'lsp:request', id, kind, buffer, line, column })) {
+      pending.delete(id);
+      clearTimeout(timer);
+      resolve(null);
+    }
   });
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DailyRecap, GradeRecord } from '../../../shared/protocol';
+import { useApi } from '../hooks/useApi';
 
 // Dark-surface viz tokens (series color validated ≥3:1 on #171717).
 const ACCENT = '#3987e5';
@@ -216,12 +217,13 @@ export default function ProgressView({ onClose, asPage }: Props) {
     }
   };
 
+  const { data: progress, error: fetchError, retry } = useApi<{ grades: GradeRecord[] }>('/api/progress');
   useEffect(() => {
-    fetch('/api/progress')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((data: { grades: GradeRecord[] }) => setGrades(data.grades))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
-  }, []);
+    if (progress) setGrades(progress.grades);
+  }, [progress]);
+  useEffect(() => {
+    setError(fetchError);
+  }, [fetchError]);
 
   // Remove a grade from the gradebook (the session JSON on disk is kept).
   const handleDelete = async (sessionId: string) => {
@@ -413,7 +415,14 @@ export default function ProgressView({ onClose, asPage }: Props) {
           </section>
         )}
 
-        {error && <div className="mb-3 rounded bg-red-900/40 px-3 py-2 text-sm text-red-300">{error}</div>}
+        {error && (
+          <div className="mb-3 flex items-center justify-between gap-3 rounded bg-red-900/40 px-3 py-2 text-sm text-red-300">
+            <span>{error}</span>
+            <button onClick={retry} className="shrink-0 rounded bg-red-800/60 px-2 py-1 text-xs hover:bg-red-700/60">
+              Retry
+            </button>
+          </div>
+        )}
         {!error && grades === null && <p className="text-sm text-neutral-500">Loading…</p>}
         {grades !== null && grades.length === 0 && (
           <p className="text-sm text-neutral-500">

@@ -311,12 +311,21 @@ export type ServerMessage =
   // Sent on every (re)connect. `resumed` means the server re-attached a
   // detached session (reconnect/refresh): the snapshot fields restore the
   // client UI so a network blip no longer wipes a 40-minute interview.
+  //
+  // `reason` says WHY the snapshot arrived, which decides who wins when the
+  // client and server disagree about the buffer. On 'connect' the browser's
+  // Monaco buffer is by construction at least as new as the server's, so the
+  // client is authoritative; on 'language' and 'reset' the user asked the
+  // server to change the buffer, so the server is. Required, not optional:
+  // shipping the client half of this without the server half must fail to
+  // compile rather than silently restore the clobbering behaviour.
   | {
       type: 'session:ready';
       sessionId: string;
       persona: Persona;
       language: Language;
       resumed: boolean;
+      reason: 'connect' | 'language' | 'reset';
       startedAt: number;
       problem: ClientProblem | null;
       buffer: string;

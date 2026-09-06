@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -18,6 +19,14 @@ export const PRELUDE_FILE = 'prelude.hpp';
 function isFile(p: string): boolean {
   try {
     return fs.statSync(p).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isDir(p: string): boolean {
+  try {
+    return fs.statSync(p).isDirectory();
   } catch {
     return false;
   }
@@ -84,3 +93,30 @@ export function toolchainEnv(): NodeJS.ProcessEnv {
   if (!path.isAbsolute(CXX)) return {};
   return { [PATH_KEY]: `${path.dirname(CXX)}${path.delimiter}${process.env.PATH ?? ''}` };
 }
+
+/**
+ * The GCC installation clangd should build against, e.g.
+ * `/usr/lib/gcc/x86_64-linux-gnu/15`. Probed from CXX itself rather than left
+ * to clang's own detection: clang picks the highest-numbered directory under
+ * /usr/lib/gcc/<triple>/, and distros ship runtime-only stubs for a newer GCC
+ * (crtbegin.o and friends, no headers) alongside the real one. When that stub
+ * wins, every libstdc++ header — <bits/stdc++.h> included — resolves to
+ * nothing and completion silently returns zero results while g++ still
+ * compiles fine. Null when the probe fails; clang then falls back to its own
+ * detection, which is correct on any machine with a single GCC.
+ */
+export const GCC_INSTALL_DIR = ((): string | null => {
+  try {
+    const out = execFileSync(CXX, ['-print-search-dirs'], {
+      encoding: 'utf8',
+      timeout: 5_000,
+      env: { ...process.env, ...toolchainEnv() },
+    });
+    const line = out.split(/\r?\n/).find((l) => l.startsWith('install:'));
+    if (!line) return null;
+    const dir = path.normalize(line.slice('install:'.length).trim());
+    return isDir(dir) ? dir : null;
+  } catch {
+    return null; // not gcc (clang++ ignores this), or not runnable — harmless
+  }
+})();

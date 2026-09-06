@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { CLANGD, CPP_PRELUDE, PRELUDE_FILE, toolchainEnv } from './toolchain.js';
+import { CLANGD, CPP_PRELUDE, GCC_INSTALL_DIR, PRELUDE_FILE, toolchainEnv } from './toolchain.js';
 
 // One clangd per WebSocket connection, speaking LSP over stdio. The client
 // ships the whole buffer with every request; we own document sync (full-text
@@ -22,6 +22,9 @@ const METHODS: Record<LspQueryKind, string> = {
 };
 
 const RPC_TIMEOUT_MS = 15_000; // generous: the first query may wait on the preamble build
+// Upper bound on the readiness probe. Measured cold start on this toolchain is
+// ~1.7s; past this we report ready anyway rather than stall autocomplete.
+const WARMUP_BUDGET_MS = 20_000;
 
 interface RpcMessage {
   jsonrpc: '2.0';
@@ -42,6 +45,7 @@ export class ClangdSession {
   private disposed = false;
 
   private readonly uri: string;
+  private readonly warmupUri: string;
   private readonly preludePath: string;
   private text: string;
   private version = 1;
@@ -53,7 +57,9 @@ export class ClangdSession {
     // resolve std symbols in buffers that carry no #include lines.
     this.preludePath = path.join(dir, PRELUDE_FILE);
     fs.writeFileSync(this.preludePath, CPP_PRELUDE);
-    this.uri = pathToFileURL(path.join(dir, `live-${randomUUID().slice(0, 8)}.cpp`)).href;
+    const stem = randomUUID().slice(0, 8);
+    this.uri = pathToFileURL(path.join(dir, `live-${stem}.cpp`)).href;
+    this.warmupUri = pathToFileURL(path.join(dir, `warmup-${stem}.cpp`)).href;
     this.text = initialBuffer;
   }
 
@@ -94,13 +100,69 @@ export class ClangdSession {
           hover: { contentFormat: ['markdown', 'plaintext'] },
         },
       },
-      initializationOptions: { fallbackFlags: ['-std=c++23', '-xc++', '-include', this.preludePath] },
+      initializationOptions: {
+        fallbackFlags: [
+          '-std=c++23',
+          '-xc++',
+          '-include',
+          this.preludePath,
+          // Point clang at the same GCC the runner compiles with, so its
+          // libstdc++ headers are the ones we complete against.
+          ...(GCC_INSTALL_DIR ? [`--gcc-install-dir=${GCC_INSTALL_DIR}`] : []),
+        ],
+      },
     });
     this.notify('initialized', {});
     this.notify('textDocument/didOpen', {
       textDocument: { uri: this.uri, languageId: 'cpp', version: this.version, text: this.text },
     });
+    await this.warmUp();
     return true;
+  }
+
+  /**
+   * Block until clangd can actually answer a completion, not merely until it
+   * has accepted the document.
+   *
+   * didOpen is a notification, so boot() used to return in ~20ms while clangd
+   * spent another ~1.8s building the <bits/stdc++.h> preamble. During that
+   * window it answers every completion with an empty list — so lsp:status said
+   * "available" while the semantic tier produced nothing, the client fell
+   * through to its curated list, and Monaco cached that dead list for the rest
+   * of the identifier. std::function was simply unreachable.
+   *
+   * Readiness is time-based, not request-based: a documentSymbol round trip
+   * (which needs the AST) still returns ~300ms before scope completions work,
+   * and a throwaway completion doesn't hurry it along. So probe with a scratch
+   * document we fully control — completing after `std::` is exactly the case
+   * that stays empty while cold — and poll until it yields. The real document
+   * shares the same preamble, so once this answers, the user's buffer will too.
+   */
+  private async warmUp(): Promise<void> {
+    const line = '  std::vec';
+    const text = `void __clangd_warmup__() {\n${line}\n}\n`;
+    this.notify('textDocument/didOpen', {
+      textDocument: { uri: this.warmupUri, languageId: 'cpp', version: 1, text },
+    });
+    const deadline = Date.now() + WARMUP_BUDGET_MS;
+    try {
+      while (!this.dead && !this.disposed && Date.now() < deadline) {
+        const res = (await this.rpc('textDocument/completion', {
+          textDocument: { uri: this.warmupUri },
+          position: { line: 1, character: line.length },
+        })) as { items?: { label?: string }[] } | null;
+        // A non-empty list is NOT the signal: while the preamble is still
+        // building, clangd answers with identifier-based fallbacks scraped from
+        // the open buffer. Require a symbol that can only come from libstdc++.
+        if (res?.items?.some((i) => (i.label ?? '').trim().startsWith('vector'))) return;
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    } catch {
+      // Probe only: a timeout still means clangd is up, and query() handles
+      // its own failures. Fall through and report ready.
+    } finally {
+      this.notify('textDocument/didClose', { textDocument: { uri: this.warmupUri } });
+    }
   }
 
   /**
@@ -131,8 +193,23 @@ export class ClangdSession {
   dispose(): void {
     this.disposed = true;
     this.fail('session disposed');
-    this.child?.kill();
+    const child = this.child;
     this.child = null;
+    if (!child) return;
+    // clangd holds the whole preamble AST in memory (~400MB), so a survivor is
+    // expensive. Close stdin first — clangd exits on EOF — then SIGTERM, then
+    // escalate: a bare kill() left orphans parented to the server process.
+    try {
+      child.stdin.end();
+    } catch {
+      // already gone
+    }
+    child.kill('SIGTERM');
+    const hard = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    }, 2_000);
+    hard.unref?.();
+    child.once('exit', () => clearTimeout(hard));
   }
 
   // --- JSON-RPC plumbing ------------------------------------------------------
