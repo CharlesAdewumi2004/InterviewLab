@@ -4,9 +4,20 @@ import os from 'node:os';
 import path from 'node:path';
 import type { BuildResult, TestFailure, TestsResult } from '../../shared/protocol';
 import type { Session } from './types.js';
-import { EXE, RUNTIMES, SHELL, type RunPlan, type Step, languageAvailable, missingToolchainMessage, setCppFlags } from './languages.js';
+import {
+  CPP_CACHE_DIR,
+  EXE,
+  RUNTIMES,
+  SHELL,
+  cppCompileFlags,
+  languageAvailable,
+  missingToolchainMessage,
+  setCppFlags,
+  type RunPlan,
+  type Step,
+} from './languages.js';
 import { LANGUAGES, languageMeta } from '../../shared/languages';
-import { CXX, toolchainEnv } from './toolchain.js';
+import { CPP_PRELUDE, CXX, PRELUDE_FILE, toolchainEnv } from './toolchain.js';
 
 const PROBE_TIMEOUT_MS = 15_000;
 
@@ -18,7 +29,7 @@ let cppProbe: Promise<void> | null = null;
 
 function probeCpp(): Promise<void> {
   cppProbe ??= (async () => {
-    const probeDir = path.join(os.tmpdir(), 'interview-lab', 'toolchain-probe');
+    const probeDir = path.join(os.tmpdir(), 'interviewlab', 'toolchain-probe');
     fs.mkdirSync(probeDir, { recursive: true });
     fs.writeFileSync(path.join(probeDir, 'p.cpp'), 'int main(){return 0;}\n');
     const opts = { cwd: probeDir, timeoutMs: PROBE_TIMEOUT_MS, env: toolchainEnv() };
@@ -34,10 +45,60 @@ function probeCpp(): Promise<void> {
     if (stdFlag !== '-std=c++23') console.warn(`${CXX} doesn't accept -std=c++23 — using ${stdFlag}.`);
 
     const s = await runProcess(CXX, [stdFlag, '-fsanitize=address,undefined', '-o', EXE, 'p.cpp'], opts);
-    if (s.code !== 0) console.warn(`ASan/UBSan unavailable with ${CXX} — compiling without sanitizers.`);
+    if (s.code !== 0) console.warn(`ASan/UBSan unavailable with ${CXX}, compiling without sanitizers.`);
     setCppFlags({ stdFlag, sanitize: s.code === 0 });
   })();
   return cppProbe;
+}
+
+/**
+ * Precompile the prelude in the background.
+ *
+ * Deliberately not awaited. A build that is still running simply means GCC
+ * falls back to parsing the header, which is what it did before, so a Run is
+ * never blocked waiting for this. Once it lands, every later compile is about
+ * a second faster.
+ */
+let preludeWarm: Promise<void> | null = null;
+
+export function warmCppPrelude(): Promise<void> {
+  preludeWarm ??= (async () => {
+    // The flags have to be probed first. A header precompiled with the
+    // defaults is silently ignored by every compile that asks for the real
+    // standard, which looks exactly like the cache working and being useless.
+    await probeCpp();
+    fs.mkdirSync(CPP_CACHE_DIR, { recursive: true });
+    const header = path.join(CPP_CACHE_DIR, PRELUDE_FILE);
+    fs.writeFileSync(header, CPP_PRELUDE);
+
+    // A precompiled header is only valid for the exact compiler and flags that
+    // produced it, so the stamp records both. Without this check the server
+    // spent five seconds of CPU rebuilding an identical header on every
+    // start, which under `tsx watch` means on every code change.
+    const stamp = path.join(CPP_CACHE_DIR, 'prelude.stamp');
+    const want = `${CXX}\n${cppCompileFlags().join(' ')}\n${CPP_PRELUDE}`;
+    const built = path.join(CPP_CACHE_DIR, `${PRELUDE_FILE}.gch`);
+    try {
+      if (fs.existsSync(built) && fs.readFileSync(stamp, 'utf8') === want) return;
+    } catch {
+      // no stamp yet, or unreadable: rebuild
+    }
+
+    const started = Date.now();
+    const result = await runProcess(
+      CXX,
+      [...cppCompileFlags(), '-x', 'c++-header', PRELUDE_FILE, '-o', `${PRELUDE_FILE}.gch`],
+      { cwd: CPP_CACHE_DIR, timeoutMs: 120_000, env: toolchainEnv() },
+    );
+    if (result.code === 0) {
+      fs.writeFileSync(stamp, want);
+      console.log(`Precompiled the C++ prelude in ${((Date.now() - started) / 1000).toFixed(1)}s (builds are now about twice as fast).`);
+    } else {
+      // Not fatal: without the .gch, GCC parses the header as before.
+      console.warn('Could not precompile the C++ prelude; builds will parse <bits/stdc++.h> each time.');
+    }
+  })();
+  return preludeWarm;
 }
 
 interface ProcResult {
@@ -202,13 +263,16 @@ export async function compileAndRun(
   }
 
   const hasHarness = Boolean(problem && problem.harness && problem.tests.length);
-  const workDir = path.join(os.tmpdir(), 'interview-lab', session.id, language);
+  const workDir = path.join(os.tmpdir(), 'interviewlab', session.id, language);
   // A stale binary from a previous run must never be executed after a failed
   // compile: clear the directory each run.
   fs.rmSync(workDir, { recursive: true, force: true });
   fs.mkdirSync(workDir, { recursive: true });
 
-  if (language === 'cpp') await probeCpp();
+  if (language === 'cpp') {
+    await probeCpp();
+    void warmCppPrelude(); // fire and forget: a cold cache just means a slower build
+  }
 
   let plan: RunPlan;
   try {
@@ -223,6 +287,11 @@ export async function compileAndRun(
 
   for (const file of plan.files) fs.writeFileSync(path.join(workDir, file.name), file.content);
 
+  // Compiler and sanitizer output names files by their path on disk. The
+  // candidate has never seen that directory, so strip it: a report should read
+  // "solution.hpp:41", the way their editor does.
+  const localise = (text: string) => text.split(workDir + path.sep).join('').split(workDir).join('');
+
   for (const step of plan.compile) {
     const result = await runStep(step, workDir);
     if (result.timedOut) {
@@ -233,13 +302,14 @@ export async function compileAndRun(
     }
     if (result.code !== 0) {
       // javac and friends put diagnostics on stderr; some tools use stdout.
-      return buildError([result.stderr, result.stdout].filter((s) => s.trim()).join('\n').trim());
+      const diagnostics = [result.stderr, result.stdout].filter((s) => s.trim()).join('\n').trim();
+      return buildError(localise(diagnostics));
     }
   }
 
   const exec = await runStep(plan.exec, workDir);
 
-  let runtimeStderr = exec.stderr.trim();
+  let runtimeStderr = localise(exec.stderr).trim();
   if (exec.timedOut) {
     runtimeStderr = [runtimeStderr, `[execution timed out after ${Math.round(plan.exec.timeoutMs / 1000)}s, killed]`]
       .filter(Boolean)
@@ -274,7 +344,7 @@ export async function toolchainReport(): Promise<
       if (!tool) {
         return { language: meta.id, label: meta.label, available: false, version: null, toolchain: meta.toolchain, install: meta.install };
       }
-      const probeDir = path.join(os.tmpdir(), 'interview-lab');
+      const probeDir = path.join(os.tmpdir(), 'interviewlab');
       fs.mkdirSync(probeDir, { recursive: true });
       const result = await runProcess(tool, runtime.versionArgs, {
         cwd: probeDir,

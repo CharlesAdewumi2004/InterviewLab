@@ -455,7 +455,7 @@ export default function ProgressView({ onClose, asPage }: Props) {
                 sub={derived.streak >= 3 ? 'bar met, book it' : 'consecutive, no red flags, D ≥ 3, narrated'}
               />
               <StatTile
-                label="Drill trigger (§7)"
+                label="Drill trigger"
                 value={derived.drill ? `Axis ${derived.drill.axis}` : 'none'}
                 sub={
                   derived.drill

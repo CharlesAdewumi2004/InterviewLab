@@ -67,7 +67,7 @@ export default function ScorecardView({ scorecard, grade, onClose }: Props) {
         {scorecard.design_review && (
           <section className="mb-4">
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-             Delivery framework review (§8)
+             Stage by stage review
               <span className="ml-2 rounded bg-blue-900/60 px-2 py-0.5 text-[10px] font-semibold normal-case text-blue-200">
                 level signal: {scorecard.design_review.level_signal}
               </span>
@@ -106,7 +106,7 @@ export default function ScorecardView({ scorecard, grade, onClose }: Props) {
         {scorecard.knowledge_review && (
           <section className="mb-4">
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-             Knowledge review (§10)
+             Question by question review
             </h3>
             <div className="mb-2 space-y-1.5">
               {scorecard.knowledge_review.items.map((item, i) => (

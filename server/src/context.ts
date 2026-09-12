@@ -32,6 +32,12 @@ function lastLines(text: string, n: number): string {
   return lines.slice(-n).join('\n');
 }
 
+function firstLines(text: string, n: number): string {
+  const lines = text.trimEnd().split('\n');
+  const head = lines.slice(0, n).join('\n');
+  return lines.length > n ? `${head}\n[... ${lines.length - n} more lines of diagnostics]` : head;
+}
+
 // Active-clock timestamp: paused time is excluded, so a break the candidate
 // took never shows up as a narration gap.
 function clockIn(session: Session, at: number): string {
@@ -157,6 +163,33 @@ const VOICE_STYLE = `<voice-mode>
 Your reply will be read aloud by text-to-speech. Speak like a person on a phone screen: plain conversational sentences with contractions, usually 1-3 of them. No markdown structure at all — no headings, bullets, tables, or emphasis markers. No emoji. Vary your openers and skip filler like "Great" or "Sure". Say numbers, symbols and code the way you'd say them out loud: "big O of n log n", "ten to the fifth", "vector of int", "the loop around line twelve". Only include code when genuinely needed, inside a fenced code block — it is shown on screen but never read aloud, so refer to it as "the snippet on your screen". End questions cleanly so the candidate knows it's their turn.
 </voice-mode>`;
 
+/**
+ * A mirror held up to the model's own last few replies.
+ *
+ * Two failure modes make an interviewer read as a bot, and both are mechanical
+ * enough to measure: opening consecutive replies the same way, and replies
+ * that keep growing until they are essays. Telling the model its own recent
+ * openers and word counts fixes far more than another paragraph of style
+ * instruction, because it is evidence rather than exhortation.
+ */
+function replyStyleNote(session: Session): string | null {
+  const replies = session.turns.filter((t) => t.role === 'assistant').slice(-3);
+  if (replies.length === 0) return null;
+
+  const openers = replies.map((t) => t.content.trim().split(/\s+/).slice(0, 3).join(' ')).filter(Boolean);
+  const words = replies.map((t) => t.content.trim().split(/\s+/).length);
+  const longest = Math.max(...words);
+
+  const notes: string[] = [];
+  if (openers.length) notes.push(`Your last replies opened with: ${openers.map((o) => `"${o}..."`).join(', ')}. Do not open this one the same way.`);
+  if (longest > 90) {
+    notes.push(
+      `Your recent replies ran to ${longest} words. An interviewer in a live round speaks in one to three sentences; cut this one back hard unless they asked for depth or you are debriefing.`,
+    );
+  }
+  return `=== YOUR RECENT REGISTER ===\n${notes.join(' ')}`;
+}
+
 function buildLiveState(
   session: Session,
   latestEdit: EditSummary | null,
@@ -174,7 +207,7 @@ function buildLiveState(
 
   if (includeBuffer) {
     parts.push(
-      `=== CURRENT BUFFER (${session.language === 'python' ? 'Python' : 'C++'}, line-numbered — supersedes every earlier buffer in this conversation) ===\n${numberLines(session.buffer)}`,
+      `=== CURRENT BUFFER (${languageMeta(session.language).label}, line-numbered, supersedes every earlier buffer in this conversation) ===\n${numberLines(session.buffer)}`,
     );
   } else {
     parts.push('=== BUFFER === unchanged since the last message');
@@ -186,6 +219,9 @@ function buildLiveState(
   }
 
   parts.push(`=== CURSOR === line ${session.cursor.line}, column ${session.cursor.column}`);
+
+  const style = replyStyleNote(session);
+  if (style) parts.push(style);
 
   if (latestEdit) {
     parts.push(`=== SINCE LAST MESSAGE === ${latestEdit.summary}`);
@@ -201,7 +237,16 @@ function buildLiveState(
   }
 
   if (session.build.status === 'error' && session.build.stderr) {
-    let build = `=== BUILD === error\n${lastLines(session.build.stderr, 20)}`;
+    // Which end of a build failure matters depends on the language. A
+    // compiler reports the FIRST error first, and everything after it is
+    // usually fallout from that one; an interpreter puts the actual exception
+    // at the END of the traceback. Showing the wrong end hands the
+    // interviewer the least useful half of the message.
+    const compiled = session.language === 'cpp' || session.language === 'java' || session.language === 'go' || session.language === 'rust';
+    const diagnostics = compiled
+      ? firstLines(session.build.stderr, 24)
+      : lastLines(session.build.stderr, 20);
+    let build = `=== BUILD === error\n${diagnostics}`;
     if (session.consecutiveBuildFailures >= 2) {
       build += `\n(the last ${session.consecutiveBuildFailures} builds failed with the same error)`;
     }

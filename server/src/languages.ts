@@ -79,17 +79,46 @@ function withPrefix(harness: string, marker: string, line: string): string {
 // Toolchains differ: MSYS2 MinGW gcc ships no libasan/libubsan, and older gcc
 // (e.g. Debian bookworm's gcc 12) spells C++23 as -std=c++2b. Probed once per
 // server process by the runner, which owns process spawning; the result is
-// injected here through setCppProbe.
+// injected here through setCppFlags.
 let cppFlags: { stdFlag: string; sanitize: boolean } = { stdFlag: '-std=c++20', sanitize: false };
 export function setCppFlags(flags: { stdFlag: string; sanitize: boolean }): void {
   cppFlags = flags;
+}
+
+/**
+ * Where the LeetCode prelude and its precompiled header live, shared across
+ * runs and sessions.
+ *
+ * Parsing <bits/stdc++.h> is most of a C++ build here: about two seconds per
+ * Run, every Run. Precompiling it once takes that to one second, which is the
+ * difference between a build you wait through and one you do not. The header
+ * must be found through this directory rather than the work directory, because
+ * GCC only uses a .gch that sits beside the header it resolved.
+ */
+export const CPP_CACHE_DIR = path.join(os.tmpdir(), 'interviewlab', 'cpp-prelude');
+
+/** The exact flags the prelude's precompiled header must be built with. */
+export function cppCompileFlags(): string[] {
+  return [
+    cppFlags.stdFlag,
+    '-O2',
+    // Debug info is what turns an AddressSanitizer report from a hex address
+    // into "solution.hpp:41", which is the whole point of running with
+    // sanitizers during practice.
+    '-g',
+    '-Wall',
+    '-Wextra',
+    ...(cppFlags.sanitize ? ['-fsanitize=address,undefined'] : []),
+  ];
 }
 
 const CPP: LanguageRuntime = {
   tool: () => (CXX_FOUND ? CXX : null),
   versionArgs: ['--version'],
   plan({ buffer, harness, workDir }) {
-    const files = [{ name: PRELUDE_FILE, content: CPP_PRELUDE }];
+    // The prelude is NOT written here: it lives in CPP_CACHE_DIR next to its
+    // precompiled header, and a copy in the work directory would shadow it.
+    const files: RunPlan['files'] = [];
     if (harness) {
       files.push({ name: 'solution.hpp', content: buffer });
       files.push({ name: 'main.cpp', content: withPrefix(harness, 'solution.hpp', '#include "solution.hpp"') });
@@ -102,15 +131,14 @@ const CPP: LanguageRuntime = {
         {
           cmd: CXX,
           args: [
-            cppFlags.stdFlag,
-            '-O2',
-            '-Wall',
-            '-Wextra',
-            // LeetCode semantics: bits/stdc++.h + using namespace std, force-
-            // included so buffer line numbers match diagnostics exactly.
+            ...cppCompileFlags(),
+            // LeetCode semantics: bits/stdc++.h and using namespace std, force
+            // included so buffer line numbers match diagnostics exactly. -I
+            // points at the cache so the precompiled header is picked up.
+            '-I',
+            CPP_CACHE_DIR,
             '-include',
             PRELUDE_FILE,
-            ...(cppFlags.sanitize ? ['-fsanitize=address,undefined'] : []),
             '-o',
             EXE,
             'main.cpp',
@@ -290,8 +318,8 @@ const GO_RT: LanguageRuntime = {
       HOME: workDir,
       // Shared across runs (the per-run work dir is wiped): a cold Go build
       // cache costs seconds on every single Run.
-      GOCACHE: path.join(os.tmpdir(), 'interview-lab', 'gocache'),
-      GOPATH: path.join(os.tmpdir(), 'interview-lab', 'gopath'),
+      GOCACHE: path.join(os.tmpdir(), 'interviewlab', 'gocache'),
+      GOPATH: path.join(os.tmpdir(), 'interviewlab', 'gopath'),
       GOFLAGS: '-mod=mod',
       GO111MODULE: 'on',
       GOTOOLCHAIN: 'local',

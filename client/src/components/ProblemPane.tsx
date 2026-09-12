@@ -69,7 +69,7 @@ function DesignBank({
         </div>
         <p className="text-xs text-neutral-500">Asked at: {designQuestion.asks.join(', ')}</p>
         <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
-          The interviewer stated the prompt in chat, deliberately vague; requirements, numbers and scope are
+          The interviewer stated the prompt in chat, deliberately vague. Requirements, numbers and scope are
           yours to extract. Use the editor as your whiteboard (APIs, data model, capacity math, ASCII diagrams).
         </p>
         <div className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-600">
@@ -330,7 +330,7 @@ export default memo(function ProblemPane({
       </div>
       {problem.oral ? (
         <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
-          The interviewer stated this problem in the chat, there's no written version. Ask them to repeat
+          The interviewer stated this problem in chat. There is no written version. Ask them to repeat
           anything you missed (that's normal phone-screen behaviour), and keep your own notes.
         </p>
       ) : (

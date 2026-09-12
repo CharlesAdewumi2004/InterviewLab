@@ -126,7 +126,10 @@ export class ChatSession {
           this.pending = null;
           if (message.subtype === 'success') {
             p.resolve({
-              text: (message.result as string) || p.text,
+              // House style is enforced on the finished reply, which is what
+              // gets stored and rendered; the live stream stays raw so tokens
+              // are never held back waiting for a rule to match.
+              text: applyHouseStyle((message.result as string) || p.text),
               usage: usageEntry('chat', MODELS.chat, message.usage ?? {}),
             });
           } else {
@@ -170,6 +173,28 @@ export class ChatSession {
     this.dead = true;
     this.input.end();
   }
+}
+
+// The system prompt asks every persona to avoid emoji and dashes. Models
+// comply most of the time, and "most of the time" is visible in a transcript,
+// so the rule is enforced here as well. Code fences are left untouched: a dash
+// inside code is a dash.
+const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu;
+
+export function applyHouseStyle(text: string): string {
+  return text
+    .split(/(```[\s\S]*?```|`[^`\n]*`)/g)
+    .map((part, i) => {
+      if (i % 2 === 1) return part; // fenced or inline code
+      return part
+        .replace(EMOJI, '')
+        .replace(/\s+—\s+/g, ', ')
+        .replace(/—/g, ', ')
+        .replace(/\s+–\s+/g, ', ')
+        .replace(/–/g, ', ')
+        .replace(/[ \t]{2,}/g, ' ');
+    })
+    .join('');
 }
 
 async function runQuery(opts: {
