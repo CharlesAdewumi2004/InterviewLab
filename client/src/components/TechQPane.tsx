@@ -61,7 +61,7 @@ export default memo(function TechQPane({ techTopics, problem, onTechStart, onDeb
         </div>
         <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-300">{problem.statement}</p>
         <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
-          The code in your editor has real problems, read it and tell the interviewer what you see before you
+          The code in your editor has real problems. Read it and tell the interviewer what you see before you
           touch anything. Then fix and optimize. Run checks correctness AND a large timed case, so a slow fix
           still fails. The interviewer will never tell you how many issues there are.
         </p>
@@ -129,7 +129,7 @@ export default memo(function TechQPane({ techTopics, problem, onTechStart, onDeb
           </button>
         </div>
         <p className="mt-1 text-xs text-neutral-500">
-         Flawed code lands in your editor, find the issues by reading, then fix and optimize until the timed
+         Flawed code lands in your editor. Find the issues by reading, then fix and optimize until the timed
           tests pass.
         </p>
         {!exercises && <p className="mt-2 text-xs text-neutral-600">Loading exercises…</p>}

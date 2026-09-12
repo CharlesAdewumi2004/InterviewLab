@@ -26,7 +26,8 @@ import ScorecardView from './components/ScorecardView';
 import ProgressView from './components/ProgressView';
 import SetupPage from './components/SetupPage';
 import { useHashRoute } from './hooks/useHashRoute';
-import { NarrationCapture, SentenceSpeaker } from './lib/voice';
+import { SentenceSpeaker } from './lib/voice';
+import { useNarration } from './hooks/useNarration';
 import { bindLspSend, handleLspMessage } from './lib/lsp';
 
 type DebriefState = { scorecard: Scorecard; grade: GradeSummary } | null;
@@ -88,13 +89,8 @@ export default function App() {
   const voiceModeRef = useRef(false);
   const speakerRef = useRef<SentenceSpeaker>(new SentenceSpeaker());
 
-  // Ambient narration: a hands-free mic that transcribes think-aloud while
-  // coding. Segments become interviewer context and Axis D evidence — they
-  // never send a chat turn. sessionEpoch bumps on session:ready so the mic
-  // state gets re-announced to a fresh server session after a reconnect.
-  const [narrationOn, setNarrationOn] = useState(false);
-  const [narrationLive, setNarrationLive] = useState<string | null>(null);
-  const [narrationError, setNarrationError] = useState<string | null>(null);
+  // Bumped on every session:ready so effects keyed to a session (the
+  // narration mic, the route's persona) re-run against the new one.
   const [sessionEpoch, setSessionEpoch] = useState(0);
 
   const handleMessage = useCallback((msg: ServerMessage) => {
@@ -247,56 +243,9 @@ export default function App() {
   // Monaco's semantic providers (monacoConfig) reach the server through this.
   useEffect(() => bindLspSend(send), [send]);
 
-  // Segments that couldn't be delivered while the socket was down — flushed
-  // on reconnect so grading evidence isn't silently lost.
-  const queuedNarrationRef = useRef<string[]>([]);
-  const [narrationActive, setNarrationActive] = useState(false);
-
-  // The capture's lifetime tracks the toggle. It pauses itself around TTS
-  // playback and push-to-talk; a fatal mic error flips the toggle back off.
-  // While the session is paused the mic drops entirely — break-time chatter
-  // must not become narration evidence.
-  useEffect(() => {
-    if (!narrationOn || pauseState.paused) return;
-    const capture = new NarrationCapture({
-      onSegment: (text) => {
-        if (!send({ type: 'narration:segment', text })) queuedNarrationRef.current.push(text);
-      },
-      onInterim: (text) => setNarrationLive(text || null),
-      onStatus: setNarrationActive,
-      onError: (message) => {
-        setNarrationError(message);
-        setNarrationOn(false);
-      },
-    });
-    if (!capture.start()) {
-      setNarrationOn(false);
-      return;
-    }
-    return () => {
-      capture.stop();
-      setNarrationLive(null);
-      setNarrationActive(false);
-    };
-  }, [narrationOn, pauseState.paused, send]);
-
-  // Announce mic on/off so the server records mic-on spans (the grader uses
-  // them to tell real silence from a mic that was off). Re-announced on
-  // reconnect — a fresh server session defaults to off — and any narration
-  // that queued up while disconnected is delivered late rather than never.
-  useEffect(() => {
-    if (!connected) return;
-    // Paused counts as mic-off for the grader's mic-on spans.
-    send({ type: 'narration:state', on: narrationOn && !pauseState.paused });
-    for (const text of queuedNarrationRef.current.splice(0)) {
-      send({ type: 'narration:segment', text });
-    }
-  }, [narrationOn, pauseState.paused, connected, sessionEpoch, send]);
-
-  const handleNarration = useCallback((on: boolean) => {
-    setNarrationError(null);
-    setNarrationOn(on);
-  }, []);
+  // Ambient think-aloud: a mic that stays open while you code, turning speech
+  // into interviewer context and Axis D evidence. It never sends a chat turn.
+  const narration = useNarration({ send, connected, paused: pauseState.paused, sessionEpoch });
 
   const handlePause = useCallback(() => {
     const next = !pausedRef.current;
@@ -510,12 +459,12 @@ export default function App() {
         pausedAt={pauseState.pausedAt}
         endingSession={endingSession}
         voiceMode={voiceMode}
-        narrationOn={narrationOn}
-        narrationActive={narrationActive}
+        narrationOn={narration.on}
+        narrationActive={narration.active}
         onNavigate={navigate}
         onPause={handlePause}
         onVoiceMode={handleVoiceMode}
-        onNarration={handleNarration}
+        onNarration={narration.setOn}
         onEndSession={handleEndSession}
         onResetSession={handleResetSession}
       />
@@ -619,8 +568,8 @@ export default function App() {
               busy={chatBusy}
               error={chatError}
               persona={persona}
-              narrationLive={narrationLive}
-              narrationError={narrationError}
+              narrationLive={narration.live}
+              narrationError={narration.error}
               inputRef={chatInputRef}
               onSend={handleChatSend}
               onBargeIn={handleBargeIn}
