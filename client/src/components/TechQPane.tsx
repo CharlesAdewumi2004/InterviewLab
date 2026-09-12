@@ -19,7 +19,7 @@ const TOPIC_LABELS: Record<TechTopic, string> = {
   data: 'Databases & caching',
 };
 const ALL_TOPICS = Object.keys(TOPIC_LABELS) as TechTopic[];
-// Bloomberg-weighted default: the chips research flagged as highest-yield.
+// Default chips: the topics the research flagged as highest yield.
 const DEFAULT_TOPICS: TechTopic[] = ['cpp', 'concurrency', 'memory', 'dsinternals'];
 
 interface DebugExerciseMeta {

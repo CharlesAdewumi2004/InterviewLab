@@ -1,135 +1,170 @@
-# Practice IDE
+# Interview Lab
 
-A local, single-user coding environment (C++ and Python) with a conversational AI that can
-always see the current code. Built for interview practice — you never paste code into a chat
-box. Runs on **your own Claude Pro/Max subscription** — no API key, and no credentials in this
-repository.
+Realistic mock interviews that run on your own machine, on your own Claude
+subscription. Five kinds of round, an interviewer who can see your editor and
+refuses to rescue you, and an evidence-first scorecard when you finish.
 
-- **LeetCode-style Monaco editor** with C++ config, STL snippets and word-based suggestions.
-  True LeetCode build semantics: every standard header is pre-included and `using namespace std`
-  is in effect (force-included prelude, so compiler errors still point at your real line numbers) —
-  solutions need zero boilerplate.
-- **Five AI personas**: technical coding, **system design** and **behavioral** interviewers —
-  each distilled from real interviewing.io mock-interview transcripts (register, hint ladders,
-  probe patterns, verbatim style exemplars) — plus a tutor who gives direct answers and a
-  **Bloomberg mock interviewer** running the full grad-SWE mock process spec.
-- **Problem intake**: paste rough problem text; it becomes a **realistic interview scenario** —
-  the algorithm dressed in a concrete product/system story with its LeetCode identity disguised
-  (title, statement and stub all use the scenario's vocabulary; recognising the structure is
-  part of the exercise) — plus a starting stub, test cases and a generated harness. Constraints
-  and examples stay **interviewer-private** — like a real interview, you only get the facts you
-  ask for, and unprompted discovery is what Axis A grades.
-- **Compile and run** against the tests locally with ASan/UBSan on, results flowing straight
-  into the AI's context — hit run, see three failures, and just type "why is that failing?".
-- **System-design practice bank** (HelloInterview-style): 16 questions across Easy/Medium/Hard
-  (Bitly → Ticketmaster → Uber/Robinhood/Top-K), each with a private interviewer brief —
-  requirements answer key, quantified NFRs, expected design, canonical deep dives, common
-  mistakes and per-level bars. Pick from the pane (or randomize); the interviewer states the
-  prompt vaguely in chat and releases facts only as you ask. Sessions are additionally graded
-  stage-by-stage against the delivery framework (requirements → entities → API → high-level →
-  deep dives) with a mid/senior/staff+ level signal (§8 of the grading doc, rubric v4).
-- **Formal grading**: every ended session is scored against `interview-grading-system.md` —
-  behaviorally anchored axes (evidence-first, 1-4), with the weighted average, decision gates
-  and hire recommendation computed deterministically server-side. Grades persist to
-  `sessions/gradebook.db` (SQLite, no setup), and the **📈 Progress** view tracks axis
-  trendlines, hint dependency, clarification hit rate, pace (session time and time-to-green)
-  and the readiness bar across sessions — filterable by time window (7/30/90 days), with
-  per-row delete for scrapping botched or test grades (the db is plain SQLite if you ever
-  want to edit it directly with any SQLite tool). A **Today's recap** button synthesizes an
-  end-of-day review across every session practised that day: what went well, what needs work
-  (recurring weaknesses flagged per §7), and concrete drills for tomorrow.
+Free, local, and open source. No API key, no per-token billing, no account on
+anyone's server, and nothing you write leaves your machine except as part of a
+request to Claude on your own plan.
 
-## Quick start with Docker (everything included)
-
-The image contains Node, g++ (with sanitizers), Python 3, clangd and the app — the only thing
-you bring is your Claude subscription:
+## Quick start
 
 ```sh
-docker compose run --rm auth   # one-time: browser login → prints a token
-# paste the token into .env:   CLAUDE_CODE_OAUTH_TOKEN=...
-docker compose up --build      # app on http://localhost:3001
-```
-
-(Already have Claude Code logged in on the host? Skip the token: uncomment the `~/.claude`
-volume mount in `docker-compose.yml` instead.) Sessions and the gradebook persist in
-`./sessions` on the host.
-
-## Running locally without Docker
-
-Requirements: Node 22+, `g++` supporting C++20 or newer (`clang++` via `CXX` in `.env` works
-too), optionally Python 3 for Python practice, optionally `clangd` for semantic completions,
-and a Claude Pro/Max subscription linked ONE of two ways:
-
-- run `claude` then `/login` once on this machine, **or**
-- `claude setup-token` and put the token in `.env` as `CLAUDE_CODE_OAUTH_TOKEN=...`
-
-```sh
+git clone <this repo> && cd interview-lab
 npm install
-npm run dev            # server on :3001, client on the Vite port it prints
+npm start
 ```
 
-Open the Vite URL. Model calls run through the Claude Agent SDK on your subscription — usage
-draws from your plan's rate windows, never pay-per-token billing, and nothing model-related
-reaches the frontend.
+Open http://localhost:3001. The Setup page inside the app checks everything and
+tells you what to fix.
 
-## Usage
+You need two things, and the app will tell you if either is missing:
 
-1. Paste a rough problem into the left pane and hit **Format problem** — the stub lands in the
-   editor. Choose **Written** (statement shown in the pane) or **Oral only** (phone-screen
-   style: the interviewer states the problem in chat/voice, nothing is written down, and asking
-   for repeats is part of the exercise).
-2. Write code — in **C++ or Python** (toolbar toggle; the problem generator produces stubs,
-   tests and harnesses in whichever is active). **Ctrl/Cmd+Enter** runs; **Ctrl/Cmd+K** focuses
-   the chat. **Ctrl+Space / F8** drives the chat mic: hold to talk (release sends) or tap to
-   toggle it on hands-free (tap again to send). The **Narrate** button separately toggles the
-   ambient think-aloud mic.
-3. Talk to the interviewer at any time — it sees your buffer, selection, cursor, build errors
-   and test results automatically. Flip to **Tutor** when you want direct answers.
-4. Sessions **start paused** — setup time (pasting, reading the problem) never counts as
-   interview time. Hit **▶ Resume** when you're ready; **⏸ Pause** any time after. Paused time
-   is excluded from every grading input (duration, timestamps, silence analysis), the narration
-   mic yields, and the persona is told the session is paused so the exchange counts as a
-   break/coaching, not interview performance.
-5. **End session** for a debrief, or **Reset** to discard the session and start fresh
-   (keeps your persona choice; no grading).
+1. **A linked Claude account.** Install [Claude Code](https://claude.com/claude-code),
+   run `claude`, and sign in once with `/login`. That is all. If you would
+   rather not install it, or you are running headless, mint a token with
+   `claude setup-token` and put it in `.env` as `CLAUDE_CODE_OAUTH_TOKEN=...`.
+2. **A toolchain for the language you practise in.** Python, JavaScript and
+   TypeScript work out of the box (JS and TS need only Node, which you already
+   have). C++, Java, Go and Rust need their compilers installed. The Setup page
+   lists each one with the exact install command for your platform.
 
-Sessions (transcript, edit history, token usage) are saved to `sessions/<id>.json`.
+Everything except running code works regardless of toolchains, so you can start
+a system design or behavioral round on a bare machine.
 
-### Bloomberg mock mode
+## The rounds
 
-Switch the persona to **Bloomberg** and drive sessions with chat triggers:
+**Coding.** Paste any problem, or pull one from the built in bank. It comes back
+re-dressed as a realistic work scenario with its textbook identity hidden, and
+the constraints held back: input sizes, edge cases and complexity targets are
+the interviewer's private notes, and extracting them by asking is part of what
+you are scored on. Write code, hit Ctrl+Enter, and compile and run against
+generated tests with the results flowing straight into the interviewer's view,
+so "why is case 3 failing?" just works.
 
-| Say this | Get this |
-|---|---|
-| "question practice" + a problem | Single question under full interview conditions, axes A–D feedback |
-| "full interview" | ~60-min phone-screen simulation (intro/resume, two problems, your questions), A–F debrief |
-| "behavioral round" | STAR/EM deep-dive on projects and motivation |
-| "code review round" | Intentionally flawed C++ (in chat) to critique as a PR review |
-| "pause" / "resume" | Suspend the mock for coaching, then continue |
+**System design.** A 16 question bank from Bitly through Ticketmaster to Uber,
+each with a private interviewer brief: requirements answer key, quantified non
+functional requirements, expected design, canonical deep dives, common mistakes
+and per level bars. The editor becomes your whiteboard. Graded stage by stage
+against the delivery framework, with a mid, senior or staff level signal.
 
-The mode enforces the STACK framework (Scope → Trace → Approach → Code → Kick the tires),
-clarification and narration grading, a calibrated hint ladder with hint-uptake scoring, and a
-blunt evidence-first feedback format. **End session** produces a Bloomberg scorecard: axis
-scores with evidence, biggest interview risk, one rewrite, highest-leverage fix, next drill,
-every hint logged, and an overall hire recommendation.
+**OOP design.** Low level design, talk then code. Scope the ask, name the
+classes and their responsibilities, defend the interfaces, then build the
+skeleton in the editor.
 
-The standing candidate context (projects to probe, language bar) lives in
-`server/src/prompts/candidate.ts` — edit it as the profile evolves.
+**Fundamentals.** The verbal CS knowledge round: operating systems, networking,
+memory, concurrency, data structure internals, databases, language internals.
+Every answer gets drilled into until it either holds up or does not. Includes
+debug and optimise exercises where deliberately broken code is seeded into your
+editor and you have to find the planted issues by reading.
 
-## Notes
+**Behavioral.** Hiring manager style STAR probing of your actual projects.
+Upload your CV and the interviewer reads it first, then cross examines what is
+actually on it: ownership, dates, metrics, the parts that shrink under
+questioning.
 
-- The interviewer's hidden per-problem brief never reaches the browser — it is stripped on the
-  server before `problem:ready` is sent.
-- Execution runs under ASan + UBSan with `hard_rss_limit_mb=512`, a 5s wall clock, and a file
-  size ulimit. Leak detection is off to match LeetCode semantics.
-- Models: Claude Sonnet 5 for conversation, Claude Opus 4.8 for problem intake and the debrief
-  (falls back to Sonnet automatically if the plan doesn't include Opus), Claude Haiku 4.5 for
-  history compaction on long sessions. Usage draws from the subscription's rate windows, not
-  pay-per-token billing.
-- Chat runs on a **persistent Claude runtime per connection** (pre-warmed at connect,
-  restarted on persona/problem changes with history replayed) — no per-message process
-  spawn, and context stays cached across turns. Conversational turns run at medium effort;
-  intake/scorecard at high; compaction at low.
-- A dropped WebSocket reconnects into a **fresh** session (v1 limitation).
-- The editor runs under interview conditions (word-based suggestions only). A study mode with
-  clangd IntelliSense is planned for phase 3 and will return as a toggle when it's wired up.
+Any round can be run by voice. Replies are spoken, push to talk sends your
+answer, and an ambient narration mic transcribes your think aloud while you
+code so that silence and explanation both count as evidence.
+
+## Languages
+
+| Language   | Needs                            | Notes |
+|------------|----------------------------------|-------|
+| Python     | Python 3.10+                     | |
+| JavaScript | Node 20+                         | Already installed |
+| TypeScript | Node 20+                         | Runs through the bundled tsx, types stripped not checked |
+| Java       | JDK 17+                          | |
+| C++        | g++ or clang++ with C++20        | Every standard header pre-included, `using namespace std` on, ASan and UBSan when available |
+| Go         | Go 1.21+                         | |
+| Rust       | rustc                            | |
+
+Switching language regenerates the stub, the tests and the harness in that
+language, and the interviewer judges idiomatic code by that language's own
+standards.
+
+To check what your machine can actually run:
+
+```sh
+npm run smoke
+```
+
+That pushes a real two case problem through every toolchain you have installed
+and skips the rest.
+
+## Grading
+
+Every session you end is scored against `interview-grading-system.md`: six
+behaviorally anchored axes from problem comprehension through communication to
+motivation, each scored 1 to 4 with quoted evidence, never a vibe. The model
+supplies the evidence and the judgments; the server computes the weighted
+average, applies the decision gates and produces the recommendation, so the
+arithmetic is the same every time.
+
+Grades persist to `sessions/gradebook.db`, a plain SQLite file. The Progress
+page tracks axis trendlines, hint dependency, clarification hit rate, pace and
+a readiness bar across sessions, filterable by time window. A daily recap
+synthesises everything you practised in one day into what went well, what keeps
+recurring, and the drills to do next.
+
+## Your profile
+
+The Setup page holds an optional profile: name, target role, seniority, target
+company and free form notes. It calibrates the level bar in every round, and
+naming a target company makes motivation questions specific to it. Leave it
+blank and every round runs company neutral. It is stored in `sessions/` on your
+machine and is git ignored, along with your CV and every transcript.
+
+## Docker
+
+The image carries Node, g++, Python, the JDK and clangd, so the only thing you
+bring is your Claude subscription:
+
+```sh
+docker compose run --rm auth      # one time: browser login, prints a token
+# paste the token into .env as CLAUDE_CODE_OAUTH_TOKEN=...
+docker compose up --build         # app on http://localhost:3001
+```
+
+Already signed in to Claude Code on the host? Skip the token and uncomment the
+`~/.claude` volume mount in `docker-compose.yml` instead. Sessions and grades
+persist in `./sessions`.
+
+## Development
+
+```sh
+npm run dev        # server on 3001, client on Vite's port with hot reload
+npm run typecheck  # both workspaces
+npm run smoke      # exercise every installed language end to end
+npm start          # build the client and serve everything from 3001
+```
+
+Layout:
+
+```
+shared/languages.ts    the language registry both sides read
+shared/protocol.ts     every WebSocket message, client and server
+server/src/languages.ts  how each language becomes files and processes
+server/src/runner.ts     executes those plans, parses test output
+server/src/prompts/      one file per interviewer persona
+server/src/*/bank.ts     the question banks, with their private briefs
+client/src/components/   the workspace, the pages, the scorecard
+```
+
+Adding a language takes three edits: an entry in `shared/languages.ts`, a
+runtime in `server/src/languages.ts` saying how to compile and run it, and an
+environment block in `server/src/prompts/intake.ts` describing the stub and
+harness contract. Nothing else in the codebase is language aware. Add a fixture
+to `server/test/runner-smoke.ts` and `npm run smoke` will cover it.
+
+## Privacy
+
+Sessions, transcripts, grades, your CV and your profile are files in
+`sessions/` on your machine, all git ignored. Model calls go to Claude under
+your own subscription and draw on your plan's normal rate limits. There is no
+telemetry, no server component, and no account.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
