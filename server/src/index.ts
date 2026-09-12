@@ -522,7 +522,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
           break;
         }
         const topics = msg.topics.length ? msg.topics : (['cpp', 'concurrency'] as TechTopic[]);
-        const qs = sampleTechRound(topics);
+        const qs = sampleTechRound(topics, store.session.language);
         if (!qs.length) {
           send({ type: 'chat:error', message: 'No bank questions for those topics yet.' });
           break;

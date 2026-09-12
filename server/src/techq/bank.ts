@@ -1,4 +1,6 @@
-import type { TechTopic } from '../../../shared/protocol';
+import type { Language, TechTopic } from '../../../shared/protocol';
+import { LANGUAGE_BANK } from './bank-languages.js';
+import { PLATFORM_BANK } from './bank-platform.js';
 
 // Tech-knowledge question bank. Authored by a verified research+authoring
 // pass (2026-09): topics chosen from what early-career interviews at systems/C++
@@ -8,6 +10,9 @@ import type { TechTopic } from '../../../shared/protocol';
 export interface TechQuestion {
   id: string;
   topic: TechTopic;
+  // Only for the 'langint' topic: the language this question belongs to, so a
+  // Python session is never asked about the prototype chain.
+  language?: Language;
   // The opening question, exactly as an interviewer says it out loud.
   question: string;
   // Depth follow-ups in escalation order, each contingent on a typical answer.
@@ -30,10 +35,15 @@ export const TECH_TOPIC_LABELS: Record<TechTopic, string> = {
   concurrency: 'Concurrency',
   dsinternals: 'DS/STL internals',
   data: 'Databases & caching',
+  web: 'Web, HTTP & APIs',
+  security: 'Security',
+  testing: 'Testing & quality',
+  devops: 'Build, CI & deploys',
+  langint: 'Language internals',
 };
 
 // Spliced in from the authoring workflow — see scripts note in repo history.
-export const TECH_BANK: TechQuestion[] = [
+const CORE_BANK: TechQuestion[] = [
   {
     "id": "networking-tcp-vs-udp",
     "topic": "networking",
@@ -1531,6 +1541,10 @@ export const TECH_BANK: TechQuestion[] = [
   }
 ];
 
+// Every question the round can draw on: core systems topics, platform topics,
+// and the per-language internals.
+export const TECH_BANK: TechQuestion[] = [...CORE_BANK, ...PLATFORM_BANK, ...LANGUAGE_BANK];
+
 export function getTechQuestion(id: string): TechQuestion | undefined {
   return TECH_BANK.find((q) => q.id === id);
 }
@@ -1538,10 +1552,27 @@ export function getTechQuestion(id: string): TechQuestion | undefined {
 // Sample a round's question set across the chosen topics: warmups first, then
 // depth, round-robin across topics so no chip dominates. ~8 questions is a
 // 30-40 minute round with follow-ups.
-export function sampleTechRound(topics: TechTopic[], count = 8): TechQuestion[] {
+// Which language banks a session draws on. TypeScript inherits JavaScript's
+// internals because they are the same runtime, and C++ keeps its dedicated
+// topic, so a C++ session's "your language" chip resolves to that bank.
+function languagePool(language: Language): { languages: Language[]; extraTopics: TechTopic[] } {
+  if (language === 'typescript') return { languages: ['typescript', 'javascript'], extraTopics: [] };
+  if (language === 'cpp') return { languages: ['cpp'], extraTopics: ['cpp'] };
+  return { languages: [language], extraTopics: [] };
+}
+
+export function sampleTechRound(topics: TechTopic[], language: Language, count = 8): TechQuestion[] {
+  const pool = languagePool(language);
+  const matches = (q: TechQuestion, t: TechTopic): boolean => {
+    if (t === 'langint') {
+      if (q.topic === 'langint') return q.language !== undefined && pool.languages.includes(q.language);
+      return pool.extraTopics.includes(q.topic);
+    }
+    return q.topic === t && (q.language === undefined || pool.languages.includes(q.language));
+  };
   const byTopic = topics
     .map((t) =>
-      TECH_BANK.filter((q) => q.topic === t)
+      TECH_BANK.filter((q) => matches(q, t))
         // Shuffle within topic, then order warmup → depth so the round ramps.
         .map((q) => ({ q, r: Math.random() }))
         .sort((a, b) => a.q.depth - b.q.depth || a.r - b.r)

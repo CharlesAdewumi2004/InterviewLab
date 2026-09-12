@@ -28,7 +28,13 @@ export type TechTopic =
   | 'lowlevel'
   | 'concurrency'
   | 'dsinternals'
-  | 'data';
+  | 'data'
+  | 'web'
+  | 'security'
+  | 'testing'
+  | 'devops'
+  // Language internals: sampled for the session's own language only.
+  | 'langint';
 
 export interface Selection {
   startLine: number;

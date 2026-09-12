@@ -9,18 +9,23 @@ interface Props {
 }
 
 const TOPIC_LABELS: Record<TechTopic, string> = {
+  langint: 'Your language',
+  web: 'Web, HTTP & APIs',
+  security: 'Security',
+  data: 'Databases & caching',
+  concurrency: 'Concurrency',
   os: 'OS',
   networking: 'Networking',
-  cpp: 'C++ internals',
   memory: 'Memory',
-  lowlevel: 'Low-level & arch',
-  concurrency: 'Concurrency',
+  testing: 'Testing & quality',
+  devops: 'Build, CI & deploys',
   dsinternals: 'DS/STL internals',
-  data: 'Databases & caching',
+  lowlevel: 'Low-level & arch',
+  cpp: 'C++ internals',
 };
 const ALL_TOPICS = Object.keys(TOPIC_LABELS) as TechTopic[];
-// Default chips: the topics the research flagged as highest yield.
-const DEFAULT_TOPICS: TechTopic[] = ['cpp', 'concurrency', 'memory', 'dsinternals'];
+// Default chips: broad enough to be a real screen, narrow enough to go deep.
+const DEFAULT_TOPICS: TechTopic[] = ['langint', 'web', 'data', 'concurrency'];
 
 interface DebugExerciseMeta {
   id: string;
