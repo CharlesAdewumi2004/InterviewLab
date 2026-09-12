@@ -4,10 +4,13 @@ import { LANGUAGES } from '../../../shared/languages';
 import { cachedSetup, type ToolchainRow } from '../lib/setup';
 import {
   getPreferredVoiceName,
+  getSpeechRate,
   listEnglishVoices,
   onVoicesChanged,
   setPreferredVoice,
+  setSpeechRate,
   speakSample,
+  SPEECH_RATES,
 } from '../lib/voice';
 
 // Shared UI atoms used by the nav bar and workspace bar.
@@ -118,6 +121,7 @@ function voiceLabel(name: string, lang: string): string {
 export function VoicePicker() {
   const [voices, setVoices] = useState(() => listEnglishVoices());
   const [selected, setSelected] = useState(() => getPreferredVoiceName() ?? '');
+  const [rate, setRate] = useState(() => getSpeechRate());
   // The browser loads its voice list asynchronously — refresh when it lands.
   useEffect(() => onVoicesChanged(() => setVoices(listEnglishVoices())), []);
   if (voices.length === 0) return null;
@@ -138,6 +142,23 @@ export function VoicePicker() {
         {voices.map((v) => (
           <option key={v.name} value={v.name}>
             {voiceLabel(v.name, v.lang)}
+          </option>
+        ))}
+      </select>
+      <select
+        value={String(rate)}
+        onChange={(e) => {
+          const next = Number(e.target.value);
+          setRate(next);
+          setSpeechRate(next);
+          speakSample();
+        }}
+        title="Speaking speed"
+        className="rounded-md border border-neutral-700 bg-neutral-900 px-1.5 py-1 text-xs text-neutral-300"
+      >
+        {SPEECH_RATES.map((r) => (
+          <option key={r} value={String(r)}>
+            {r.toFixed(2)}x
           </option>
         ))}
       </select>

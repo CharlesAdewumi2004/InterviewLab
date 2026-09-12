@@ -329,7 +329,8 @@ export function onVoicesChanged(cb: () => void): () => void {
   return () => speechSynthesis.removeEventListener('voiceschanged', cb);
 }
 
-const PREF_KEY = 'practice-ide:tts-voice';
+const PREF_KEY = 'interview-lab:tts-voice';
+const RATE_KEY = 'interview-lab:tts-rate';
 let cachedVoice: SpeechSynthesisVoice | null | undefined;
 
 export function getPreferredVoiceName(): string | null {
@@ -342,16 +343,76 @@ export function setPreferredVoice(name: string | null): void {
   cachedVoice = undefined;
 }
 
+// Interviewers talk at very different speeds, and so do listeners. Persisted
+// because it is a comfort setting, not a session one.
+export const SPEECH_RATES = [0.85, 0.95, 1.05, 1.15, 1.3] as const;
+const DEFAULT_RATE = 1.05;
+
+export function getSpeechRate(): number {
+  const stored = Number(localStorage.getItem(RATE_KEY));
+  return Number.isFinite(stored) && stored >= 0.5 && stored <= 2 ? stored : DEFAULT_RATE;
+}
+
+export function setSpeechRate(rate: number): void {
+  localStorage.setItem(RATE_KEY, String(rate));
+}
+
 /** Speak a short line with the current voice so a picker choice is auditable. */
 export function speakSample(): void {
   speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(
-    'Hi, this is how your interviewer will sound. Ready when you are.',
-  );
+  enqueue('Hi, this is how your interviewer will sound. Ready when you are.');
+}
+
+// Chrome stops synthesising after roughly fifteen seconds of continuous
+// speech unless the engine is nudged, and it silently truncates very long
+// utterances. Both are worked around here: text is split into utterances
+// short enough to survive, and a pump calls resume() while anything is
+// speaking. Everything that speaks goes through this function.
+const MAX_UTTERANCE_CHARS = 180;
+let resumePump: ReturnType<typeof setInterval> | null = null;
+
+function startResumePump(): void {
+  if (resumePump !== null) return;
+  resumePump = setInterval(() => {
+    if (!speechSynthesis.speaking && !speechSynthesis.pending) {
+      clearInterval(resumePump as ReturnType<typeof setInterval>);
+      resumePump = null;
+      return;
+    }
+    // A paused-then-resumed engine keeps going; on engines without the bug
+    // this is a no-op, because resume() on a playing utterance does nothing.
+    speechSynthesis.pause();
+    speechSynthesis.resume();
+  }, 8_000);
+}
+
+/** Split on clause boundaries so no single utterance is long enough to be cut. */
+function splitForSpeech(text: string): string[] {
+  if (text.length <= MAX_UTTERANCE_CHARS) return [text];
+  const parts: string[] = [];
+  let rest = text;
+  while (rest.length > MAX_UTTERANCE_CHARS) {
+    const window = rest.slice(0, MAX_UTTERANCE_CHARS);
+    const cut = Math.max(window.lastIndexOf(', '), window.lastIndexOf('; '), window.lastIndexOf(': '));
+    const at = cut > 60 ? cut + 1 : window.lastIndexOf(' ');
+    const head = rest.slice(0, at > 0 ? at : MAX_UTTERANCE_CHARS).trim();
+    if (head) parts.push(head);
+    rest = rest.slice(at > 0 ? at : MAX_UTTERANCE_CHARS).trim();
+  }
+  if (rest) parts.push(rest);
+  return parts;
+}
+
+function enqueue(text: string): void {
   const voice = pickVoice();
-  if (voice) u.voice = voice;
-  u.rate = 1.05;
-  speechSynthesis.speak(u);
+  const rate = getSpeechRate();
+  for (const part of splitForSpeech(text)) {
+    const u = new SpeechSynthesisUtterance(part);
+    if (voice) u.voice = voice;
+    u.rate = rate;
+    speechSynthesis.speak(u);
+  }
+  startResumePump();
 }
 
 function pickVoice(): SpeechSynthesisVoice | null {
@@ -368,14 +429,48 @@ if ('speechSynthesis' in window) {
   });
 }
 
+// Technical prose read aloud verbatim is where browser voices fall apart:
+// "O(n log n)" becomes "oh open paren en", and "10^5" becomes "ten caret
+// five". Rewriting the notation the way a person would say it is the single
+// biggest quality win available without leaving the browser.
+const SPOKEN: [RegExp, string][] = [
+  [/\bO\(1\)/g, 'constant time'],
+  [/\bO\(n\s*log\s*n\)/gi, 'big O of n log n'],
+  [/\bO\(log\s*n\)/gi, 'big O of log n'],
+  [/\bO\(n\^?2\)/gi, 'big O of n squared'],
+  [/\bO\(n\^?3\)/gi, 'big O of n cubed'],
+  [/\bO\(([^)]{1,24})\)/g, 'big O of $1'],
+  [/(\d+)\s*\^\s*(\d+)/g, '$1 to the power $2'],
+  [/\bn\s*\^\s*2\b/gi, 'n squared'],
+  [/\bn\s*\^\s*3\b/gi, 'n cubed'],
+  [/\b10\^5\b/g, 'ten to the fifth'],
+  [/\s*->\s*/g, ' to '],
+  [/\s*=>\s*/g, ' gives '],
+  [/\s*&&\s*/g, ' and '],
+  [/\s*\|\|\s*/g, ' or '],
+  [/\s*!==?\s*/g, ' is not equal to '],
+  [/\s*===?\s*/g, ' equals '],
+  [/\s*<=\s*/g, ' at most '],
+  [/\s*>=\s*/g, ' at least '],
+  [/\bi\+\+/g, 'i plus plus'],
+  [/\be\.g\./gi, 'for example'],
+  [/\bi\.e\./gi, 'that is'],
+  [/\bvs\.?\b/gi, 'versus'],
+  [/\betc\.?\b/gi, 'and so on'],
+  [/\bTODO\b/g, 'to do'],
+  [/https?:\/\/\S+/g, 'a link on screen'],
+];
+
 // Make streamed markdown speakable: drop formatting characters, never speak
-// code. Called on sentence-sized chunks that are already fence-free.
+// code, and say technical notation the way a person would.
 function speakable(text: string): string {
-  return text
+  let out = text
     .replace(/`[^`]*`/g, ' the snippet on screen ')
-    .replace(/[*_#|>]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '')
+    .replace(/[*_#|>~]/g, '');
+  for (const [pattern, replacement] of SPOKEN) out = out.replace(pattern, replacement);
+  return out.replace(/\s+/g, ' ').trim();
 }
 
 // Accumulates streamed deltas, extracts complete sentences (skipping fenced
@@ -476,11 +571,8 @@ export class SentenceSpeaker {
 
   private flushSpeech(): void {
     if (this.stopped || !this.pendingSpeech) return;
-    const u = new SpeechSynthesisUtterance(this.pendingSpeech);
+    const text = this.pendingSpeech;
     this.pendingSpeech = '';
-    const voice = pickVoice();
-    if (voice) u.voice = voice;
-    u.rate = 1.05;
-    speechSynthesis.speak(u); // enqueues; utterances play back-to-back
+    enqueue(text); // enqueues; utterances play back-to-back
   }
 }

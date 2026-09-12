@@ -57,7 +57,7 @@ export default memo(function TechQPane({ techTopics, problem, onTechStart, onDeb
         <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-300">{problem.statement}</p>
         <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
           The code in your editor has real problems, read it and tell the interviewer what you see before you
-          touch anything. Then fix and optimize:  Run checks correctness AND a large timed case, so a slow fix
+          touch anything. Then fix and optimize. Run checks correctness AND a large timed case, so a slow fix
           still fails. The interviewer will never tell you how many issues there are.
         </p>
       </div>

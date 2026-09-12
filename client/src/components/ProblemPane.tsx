@@ -283,7 +283,7 @@ export default memo(function ProblemPane({
           </button>
           <button
             onClick={() => setFraming('plain')}
-            title="No invented context at all, the problem delivered straight, just phrased the way an interviewer would say it. Constraints still stay hidden until you ask."
+            title="No invented context at all, the problem delivered straight, phrased the way an interviewer would say it. Constraints still stay hidden until you ask."
             className={
               framing === 'plain'
                 ? 'flex-1 bg-blue-700 px-2 py-1 font-medium text-white'
