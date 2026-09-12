@@ -32,6 +32,12 @@ function lastLines(text: string, n: number): string {
   return lines.slice(-n).join('\n');
 }
 
+function firstLines(text: string, n: number): string {
+  const lines = text.trimEnd().split('\n');
+  const head = lines.slice(0, n).join('\n');
+  return lines.length > n ? `${head}\n[... ${lines.length - n} more lines of diagnostics]` : head;
+}
+
 // Active-clock timestamp: paused time is excluded, so a break the candidate
 // took never shows up as a narration gap.
 function clockIn(session: Session, at: number): string {
@@ -231,7 +237,16 @@ function buildLiveState(
   }
 
   if (session.build.status === 'error' && session.build.stderr) {
-    let build = `=== BUILD === error\n${lastLines(session.build.stderr, 20)}`;
+    // Which end of a build failure matters depends on the language. A
+    // compiler reports the FIRST error first, and everything after it is
+    // usually fallout from that one; an interpreter puts the actual exception
+    // at the END of the traceback. Showing the wrong end hands the
+    // interviewer the least useful half of the message.
+    const compiled = session.language === 'cpp' || session.language === 'java' || session.language === 'go' || session.language === 'rust';
+    const diagnostics = compiled
+      ? firstLines(session.build.stderr, 24)
+      : lastLines(session.build.stderr, 20);
+    let build = `=== BUILD === error\n${diagnostics}`;
     if (session.consecutiveBuildFailures >= 2) {
       build += `\n(the last ${session.consecutiveBuildFailures} builds failed with the same error)`;
     }

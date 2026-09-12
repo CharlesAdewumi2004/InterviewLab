@@ -5,7 +5,7 @@ import path from 'node:path';
 import { WebSocketServer } from 'ws';
 import { buildServer } from './routes.js';
 import { disposeAllClangd, flushAllSessions, handleConnection } from './session-socket.js';
-import { toolchainReport } from './runner.js';
+import { toolchainReport, warmCppPrelude } from './runner.js';
 
 // Bootstrap: start the HTTP server, attach the WebSocket endpoint, say what
 // this machine can do, and flush sessions on the way out. The HTTP API lives
@@ -32,6 +32,10 @@ await fastify.listen({ port: PORT, host: HOST });
 
 const wss = new WebSocketServer({ server: fastify.server, path: '/ws' });
 wss.on('connection', handleConnection);
+
+// Precompile the C++ prelude in the background, so the first Run of the day
+// is as fast as the tenth. Never awaited: a cold cache only costs speed.
+void warmCppPrelude();
 
 const url = `http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`;
 const access = modelAccessNote();
