@@ -3,6 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import type { BuildResult, Cursor, Language, Persona, Selection, TestsResult, Turn } from '../../shared/protocol';
+import { normalizePersona } from '../../shared/protocol';
+import { DEFAULT_LANGUAGE, LANGUAGES } from '../../shared/languages';
 import type { EditSummary, NarrationSegment, ServerProblem, Session, UsageEntry } from './types.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -24,25 +26,12 @@ export function activeMs(session: Session, at: number): number {
   return Math.max(0, at - session.startedAt - pausedMsUntil(session, at));
 }
 
-// LeetCode semantics: the C++ build force-includes <bits/stdc++.h> and
-// `using namespace std;` — buffers need no boilerplate.
-const DEFAULT_BUFFERS: Record<Language, string> = {
-  cpp: `// All standard headers are pre-included and \`using namespace std\` is on
-// (LeetCode-style) — no #includes needed.
-// Paste a rough problem into the left pane to generate a stub and tests,
-// or just write code here and hit Ctrl/Cmd+Enter to compile and run.
-
-int main() {
-    cout << "hello" << endl;
-    return 0;
-}
-`,
-  python: `# Paste a rough problem into the left pane to generate a stub and tests,
-# or just write code here and hit Ctrl/Cmd+Enter to run.
-
-print("hello")
-`,
-};
+// One starting buffer per language, from the shared registry — the client's
+// pristine-buffer check reads the same source, so a reconnect never mistakes
+// an untouched default for work worth protecting.
+const DEFAULT_BUFFERS = Object.fromEntries(
+  LANGUAGES.map((l) => [l.id, l.defaultBuffer]),
+) as Record<Language, string>;
 
 export class SessionStore {
   session: Session;
@@ -51,6 +40,10 @@ export class SessionStore {
   private lastTurnBuffer: string;
   private lastErrorSignature: string | null = null;
   private saveTimer: NodeJS.Timeout | null = null;
+  // Set once the candidate actually edits the buffer. Typing is the one form
+  // of work that produces no turn, run or problem, so without this a
+  // code-only session looks empty to hasActivity() and is never written.
+  private dirty = false;
 
   constructor() {
     const now = Date.now();
@@ -59,8 +52,8 @@ export class SessionStore {
       startedAt: now,
       persona: 'interviewer',
       problem: null,
-      buffer: DEFAULT_BUFFERS.cpp,
-      language: 'cpp',
+      buffer: DEFAULT_BUFFERS[DEFAULT_LANGUAGE],
+      language: DEFAULT_LANGUAGE,
       selection: null,
       cursor: { line: 1, column: 1 },
       build: { status: 'clean', stderr: null, at: 0 },
@@ -119,6 +112,10 @@ export class SessionStore {
 
     const store = new SessionStore();
     store.session = { ...store.session, ...onDisk, id: onDisk.id };
+    // Session files written before a persona or language was renamed still
+    // hold the old id — normalize rather than crash on an unknown key.
+    store.session.persona = normalizePersona(store.session.persona);
+    if (!DEFAULT_BUFFERS[store.session.language]) store.session.language = DEFAULT_LANGUAGE;
     const s = store.session;
     const now = Date.now();
     // Close any span state the crash/restart left open, then account for the
@@ -138,6 +135,7 @@ export class SessionStore {
   }
 
   updateEditor(buffer: string, selection: Selection | null, cursor: Cursor): void {
+    if (buffer !== this.session.buffer) this.dirty = true;
     this.session.buffer = buffer;
     this.session.selection = selection;
     this.session.cursor = cursor;
@@ -156,6 +154,7 @@ export class SessionStore {
     if (pristine) {
       this.session.buffer = DEFAULT_BUFFERS[language];
       this.lastTurnBuffer = this.session.buffer;
+      this.dirty = false; // swapping one untouched default for another isn't work
     }
   }
 
@@ -313,9 +312,17 @@ export class SessionStore {
   // A session where nothing happened (no problem, no conversation, no runs,
   // no narration) isn't worth a file — without this, every page load and dev
   // StrictMode remount persisted an empty session JSON.
+  //
+  // `dirty` is load-bearing: s.edits only accrues at chat-turn boundaries
+  // (recordEditBoundary), so a candidate who just writes code produces none of
+  // the other signals. Without it saveSoon() from editor:state scheduled a
+  // save that save() then discarded, no file was ever written, and every
+  // restart came back resumed=false — which makes the client replace the live
+  // buffer with the default. That is data loss, not just a missing feature.
   private hasActivity(): boolean {
     const s = this.session;
     return (
+      this.dirty ||
       s.turns.length > 0 ||
       s.runs.length > 0 ||
       s.problem !== null ||
@@ -326,6 +333,10 @@ export class SessionStore {
   }
 
   save(): void {
+    // Note the ordering: a pending saveSoon() is cancelled even if this call
+    // then bails on hasActivity(). That is only safe because `dirty` makes an
+    // edited buffer count as activity — otherwise an incidental save() from
+    // persona:set/language:set would silently swallow a scheduled editor save.
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;

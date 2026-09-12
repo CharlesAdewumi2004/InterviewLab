@@ -8,10 +8,11 @@ import { fileURLToPath } from 'node:url';
 import type { IncomingMessage } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { ClientMessage, ClientProblem, Scorecard, ServerMessage, TechTopic, Turn } from '../../shared/protocol';
-import { activeMs, pausedMsUntil, SessionStore } from './session.js';
+import { activeMs, pausedMsUntil, SESSIONS_DIR, SessionStore } from './session.js';
 import { assembleTurn, buildSystemPrompt } from './context.js';
-import { ChatSession, maybeCompact, structuredCall } from './claude.js';
+import { ChatSession, maybeCompact, probeModelAccess, structuredCall } from './claude.js';
 import { ClangdSession } from './clangd.js';
+import { CLANGD } from './toolchain.js';
 import { deleteGrade, listGrades, recordGrade } from './gradebook.js';
 import { dailyRecap } from './recap.js';
 import { getDesignQuestion, listDesignQuestions, randomDesignQuestion } from './sysdesign/bank.js';
@@ -20,7 +21,8 @@ import { debugToProblem, getDebugExercise, listDebugExercises, randomDebugExerci
 import { getOopQuestion, listOopQuestions, randomOopQuestion } from './oop/bank.js';
 import { clearCv, cvStatus, setCv } from './cv.js';
 import { listCodingQuestions } from './coding-bank.js';
-import { compileAndRun } from './runner.js';
+import { compileAndRun, toolchainReport } from './runner.js';
+import { getProfile, setProfile, type Profile } from './profile.js';
 import { intakePrompt, INTAKE_SCHEMA } from './prompts/intake.js';
 import { SCORECARD_PROMPT, SCORECARD_SCHEMA } from './prompts/scorecard.js';
 import type { ServerProblem } from './types.js';
@@ -30,24 +32,25 @@ const PORT = Number(process.env.PORT || 3001);
 const HOST = process.env.HOST || '127.0.0.1';
 
 // Model calls run through the Claude Agent SDK on the user's own Claude
-// subscription — no API key involved. See claude.ts. Two ways to link an
-// account, checked here so a fresh setup gets clear instructions at boot.
-if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-  console.log('Model access: Claude subscription via CLAUDE_CODE_OAUTH_TOKEN.');
-} else if (fs.existsSync(path.join(os.homedir(), '.claude'))) {
-  console.log('Model access: Claude Code login found on this machine (run `claude` then `/login` if calls fail with auth errors).');
-} else {
-  console.warn(
-    [
-      '',
-      '⚠ No Claude account linked yet — model calls will fail until you do ONE of:',
-      '  1. Run `claude` then `/login` on this machine (Claude Pro/Max subscription), or',
-      '  2. Run `claude setup-token` (on any machine — or `docker compose run --rm auth`),',
-      '     then put the token in .env as CLAUDE_CODE_OAUTH_TOKEN=...',
-      'Your account, your usage — nothing is stored in this repository.',
-      '',
-    ].join('\n'),
-  );
+// subscription — no API key involved (see claude.ts). Credentials come from
+// either a Claude Code login on this machine or a subscription token, so a
+// fresh install gets told which it found, or how to link one.
+function modelAccessNote(): string {
+  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) return 'Claude subscription linked via CLAUDE_CODE_OAUTH_TOKEN.';
+  if (fs.existsSync(path.join(os.homedir(), '.claude'))) return 'Claude subscription linked via the Claude Code login on this machine.';
+  return '';
+}
+
+function sessionsWritable(): boolean {
+  try {
+    fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+    const probe = path.join(SESSIONS_DIR, '.write-probe');
+    fs.writeFileSync(probe, '');
+    fs.rmSync(probe);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function errorMessage(err: unknown): string {
@@ -72,6 +75,13 @@ function toClientProblem(p: ServerProblem): ClientProblem {
 const DETACHED_TTL_MS = 60 * 60_000;
 const detached = new Map<string, { store: SessionStore; timer: NodeJS.Timeout }>();
 
+// Every store with a live socket, so shutdown can flush them. Without this a
+// `tsx watch` restart (SIGTERM) dropped the process with the newest buffer
+// only in memory: the reconnect then found no file, answered resumed=false,
+// and the client replaced the candidate's code with the default buffer.
+const liveStores = new Set<SessionStore>();
+const liveClangd = new Set<ClangdSession>();
+
 function handleConnection(socket: WebSocket, request: IncomingMessage): void {
   const sid = new URL(request.url ?? '/', 'http://localhost').searchParams.get('sid');
   const held = sid ? detached.get(sid) : undefined;
@@ -85,6 +95,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
   const fromDisk = !held && sid ? SessionStore.fromDisk(sid) : null;
   let store = held ? held.store : (fromDisk ?? new SessionStore());
   const resumed = held !== undefined || fromDisk !== null;
+  liveStores.add(store);
   let chatBusy = false;
   let runBusy = false;
   let endBusy = false;
@@ -104,7 +115,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
   };
 
   // Sent at connect and again after a session:reset swaps the store.
-  const announceSession = (asResumed: boolean) => {
+  const announceSession = (asResumed: boolean, reason: 'connect' | 'language' | 'reset' = 'connect') => {
     const s = store.session;
     const lastPause = s.pauseSpans[s.pauseSpans.length - 1];
     const pausedNow = lastPause !== undefined && lastPause.to === null;
@@ -116,6 +127,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
       persona: s.persona,
       language: s.language,
       resumed: asResumed,
+      reason,
       startedAt: s.startedAt,
       problem: s.problem ? toClientProblem(s.problem) : null,
       buffer: s.buffer,
@@ -148,6 +160,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
   // Semantic autocomplete: boot clangd eagerly so the expensive first parse
   // of <bits/stdc++.h> happens now, not on the first keystroke.
   const clangd = new ClangdSession(store.session.buffer);
+  liveClangd.add(clangd);
   void clangd.ready().then((available) => send({ type: 'lsp:status', available }));
 
   async function handleChat(msg: Extract<ClientMessage, { type: 'chat:send' }>): Promise<void> {
@@ -181,7 +194,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
       // failure: recording it — or keeping the runtime — would poison the
       // session transcript with an empty assistant block, and the API then
       // rejects every later turn with "text content blocks must be non-empty".
-      if (!text.trim()) throw new Error('The model returned an empty reply — send that again.');
+      if (!text.trim()) throw new Error('The model returned an empty reply. Send that again.');
 
       const turn: Turn = { role: 'assistant', content: text, at: Date.now(), persona: st.session.persona };
       st.addTurn(turn);
@@ -239,7 +252,9 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         userContent: msg.raw,
         schema: INTAKE_SCHEMA as unknown as Record<string, unknown>,
       });
-      const problem: ServerProblem = { ...data, oral: msg.delivery === 'oral' };
+      // The model was prompted for this session's language; stamping it here
+      // is what lets a later language switch detect a stale harness.
+      const problem: ServerProblem = { ...data, language: st.session.language, oral: msg.delivery === 'oral' };
       st.setProblem(problem);
       st.recordUsage(usage);
       st.save();
@@ -272,7 +287,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         narration: st.takePendingNarration(),
       });
       const { text, usage } = await chat.send(turnText, (t) => send({ type: 'chat:delta', text: t }));
-      if (!text.trim()) throw new Error('The interviewer failed to state the problem — say "please give me the problem".');
+      if (!text.trim()) throw new Error('The interviewer failed to state the problem. Say "please give me the problem".');
       const turn: Turn = { role: 'assistant', content: text, at: Date.now(), persona: st.session.persona };
       st.addTurn(turn);
       st.recordUsage(usage);
@@ -415,7 +430,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
       st.session.debrief = data;
       const grade = recordGrade({
         session: s,
-        persona: s.turns.some((t) => t.persona === 'bloomberg') ? 'bloomberg' : s.persona,
+        persona: s.turns.some((t) => t.persona === 'mock') ? 'mock' : s.persona,
         scorecard: data,
       });
       st.save();
@@ -461,7 +476,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         resetChat(); // the persona is told which language the candidate works in
         // Full snapshot back: the buffer may have swapped to the new
         // language's default, and the editor needs its syntax mode updated.
-        announceSession(false);
+        announceSession(false, 'language');
         break;
       case 'narration:segment':
         // Context + grading evidence only — never triggers a model call.
@@ -477,7 +492,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         break;
       case 'cv:updated':
         // CV changed via HTTP — rebuild the runtime so the persona context
-        // (behavioral/bloomberg) picks up the new resume text.
+        // (behavioral / full mock) picks up the new resume text.
         resetChat();
         break;
       case 'design:pick': {
@@ -486,7 +501,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         // even when the subscription's rate window is exhausted. The fresh
         // runtime replays this turn from history on the first real message.
         if (chatBusy) {
-          send({ type: 'chat:error', message: 'Still responding — pick a design question after this reply.' });
+          send({ type: 'chat:error', message: 'Still responding. Pick a design question after this reply.' });
           break;
         }
         const q = (msg.id ? getDesignQuestion(msg.id) : undefined) ?? randomDesignQuestion();
@@ -503,11 +518,11 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         // Same model-free pattern as design:pick: the bank supplies the first
         // question verbatim; the private set rides the rebuilt system prompt.
         if (chatBusy) {
-          send({ type: 'chat:error', message: 'Still responding — start the round after this reply.' });
+          send({ type: 'chat:error', message: 'Still responding. Start the round after this reply.' });
           break;
         }
         const topics = msg.topics.length ? msg.topics : (['cpp', 'concurrency'] as TechTopic[]);
-        const qs = sampleTechRound(topics);
+        const qs = sampleTechRound(topics, store.session.language);
         if (!qs.length) {
           send({ type: 'chat:error', message: 'No bank questions for those topics yet.' });
           break;
@@ -517,18 +532,18 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         resetChat(); // system prompt now carries the sampled question set
         send({ type: 'techq:ready', topics });
         cannedTurn(
-          `Alright — fundamentals round: ${topics.map((t) => TECH_TOPIC_LABELS[t].toLowerCase()).join(', ')}. No trick questions, just tell me how things actually work. ${qs[0].question}`,
+          `Alright, fundamentals round: ${topics.map((t) => TECH_TOPIC_LABELS[t].toLowerCase()).join(', ')}. No trick questions, just tell me how things actually work. ${qs[0].question}`,
         );
         break;
       }
       case 'debug:pick': {
         if (chatBusy) {
-          send({ type: 'chat:error', message: 'Still responding — pick an exercise after this reply.' });
+          send({ type: 'chat:error', message: 'Still responding. Pick an exercise after this reply.' });
           break;
         }
         const ex = (msg.id ? getDebugExercise(msg.id) : undefined) ?? randomDebugExercise(store.session.language);
         if (!ex) {
-          send({ type: 'problem:error', message: `No debug exercises for ${store.session.language} yet — switch language or pick a topic drill.` });
+          send({ type: 'problem:error', message: `No debug exercises for ${store.session.language} yet. Switch language or pick a topic drill.` });
           break;
         }
         // Runs through the standard problem machinery: flawed code becomes the
@@ -540,12 +555,12 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         store.save();
         resetChat();
         send({ type: 'problem:ready', problem: toClientProblem(problem), buffer: problem.signature });
-        cannedTurn(`${ex.scenario} The code's in your editor — have a read and tell me what you see.`);
+        cannedTurn(`${ex.scenario} The code's in your editor. Have a read and tell me what you see.`);
         break;
       }
       case 'oop:pick': {
         if (chatBusy) {
-          send({ type: 'chat:error', message: 'Still responding — pick a question after this reply.' });
+          send({ type: 'chat:error', message: 'Still responding. Pick a question after this reply.' });
           break;
         }
         const q = (msg.id ? getOopQuestion(msg.id) : undefined) ?? randomOopQuestion();
@@ -570,10 +585,12 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         // paused, like every session.
         store.save();
         const persona = store.session.persona;
+        liveStores.delete(store);
         store = new SessionStore();
+        liveStores.add(store);
         store.setPersona(persona);
         resetChat();
-        announceSession(false);
+        announceSession(false, 'reset');
         break;
       }
       case 'lsp:request':
@@ -591,6 +608,8 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
   socket.on('close', () => {
     chat.dispose();
     clangd.dispose();
+    liveClangd.delete(clangd);
+    liveStores.delete(store);
     store.save();
     // Park the session for resume instead of discarding it.
     const id = store.session.id;
@@ -620,7 +639,7 @@ fastify.get('/health', async () => ({ ok: true }));
 fastify.get('/api/progress', async () => ({ grades: listGrades() }));
 // System-design bank: client-safe metadata only (briefs never leave the server).
 fastify.get('/api/design-questions', async () => ({ questions: listDesignQuestions() }));
-// Coding bank: frequency-grounded suggestions (Bloomberg tier-1 + grad top-40).
+// Coding bank: frequency-grounded suggestions (core screen pool + extended set).
 // Seeds are inputs, not answer keys — intake re-dresses them as scenarios.
 fastify.get('/api/coding-questions', async () => ({ questions: listCodingQuestions() }));
 // OOP design bank: client-safe metadata only (briefs never leave the server).
@@ -628,9 +647,38 @@ fastify.get('/api/oop-questions', async () => ({ questions: listOopQuestions() }
 // Debug-&-optimize exercises: titles only — the planted issues stay private.
 fastify.get('/api/debug-exercises', async () => ({ exercises: listDebugExercises() }));
 
+// Setup doctor: what this machine can and cannot do right now. The setup page
+// renders it as a checklist, and every failing row carries its own fix.
+fastify.get('/api/setup', async () => {
+  const tokenLinked = Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN);
+  const loginDir = path.join(os.homedir(), '.claude');
+  const loginFound = fs.existsSync(loginDir);
+  return {
+    model: {
+      // Credentials existing is not the same as credentials working — the
+      // page offers a live probe for that.
+      linked: tokenLinked || loginFound,
+      via: tokenLinked ? 'token' : loginFound ? 'claude-code-login' : null,
+    },
+    languages: await toolchainReport(),
+    // Semantic C++ completion is a bonus, never a requirement.
+    clangd: { available: CLANGD !== null, path: CLANGD },
+    storage: { sessionsDir: SESSIONS_DIR, writable: sessionsWritable() },
+    voice: { note: 'Speech input and playback are browser features. Chrome and Edge support both.' },
+  };
+});
+
+// Live check that model calls actually work on this machine (one cheap call).
+fastify.post('/api/setup/probe', async () => probeModelAccess());
+
+// The practising candidate's profile: role, level, target company, notes.
+// Entirely optional, stored locally, injected into the interviewer personas.
+fastify.get('/api/profile', async () => getProfile());
+fastify.put('/api/profile', async (request) => setProfile((request.body ?? {}) as Partial<Profile>));
+
 // Candidate CV: uploaded as PDF (parsed server-side) or plain text, stored
 // locally in sessions/cv.txt (git-ignored), injected into the behavioral and
-// Bloomberg personas so the interviewer has "read the resume".
+// full-mock personas so the interviewer has "read the resume".
 fastify.addContentTypeParser('application/pdf', { parseAs: 'buffer' }, (_req, body, done) => done(null, body));
 fastify.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done) => done(null, body));
 fastify.get('/api/cv', async () => cvStatus());
@@ -651,7 +699,7 @@ fastify.put('/api/cv', { bodyLimit: 10 * 1024 * 1024 }, async (request, reply) =
     }
     if (!text.trim()) {
       reply.code(400);
-      return { error: 'No readable text found — export the CV as a PDF with selectable text, or upload it as .txt/.md.' };
+      return { error: 'No readable text found. Export the CV as a PDF with selectable text, or upload it as .txt/.md.' };
     }
     setCv(text);
     return { ok: true, status: cvStatus() };
@@ -696,4 +744,46 @@ fastify.post('/api/recap', async (request, reply) => {
 await fastify.listen({ port: PORT, host: HOST });
 const wss = new WebSocketServer({ server: fastify.server, path: '/ws' });
 wss.on('connection', handleConnection);
-console.log(`practice-ide server listening on http://${HOST}:${PORT} (ws at /ws)`);
+
+const url = `http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`;
+const access = modelAccessNote();
+const ready = (await toolchainReport()).filter((l) => l.available).map((l) => l.label);
+console.log(
+  [
+    '',
+    `  Interview Lab is running at ${url}`,
+    '',
+    `  Model access  ${access || 'NOT LINKED. Open the Setup page, or run: claude setup-token'}`,
+    `  Languages     ${ready.length ? ready.join(', ') : 'none detected. Install a toolchain, then see the Setup page'}`,
+    `  Setup check   ${url}/#/setup`,
+    '',
+  ].join('\n'),
+);
+
+// tsx watch restarts on every code change, and a dev machine sends SIGINT on
+// Ctrl-C: flush live sessions to disk so the reconnect resumes instead of
+// handing the client an empty session, and reap the clangd children (each
+// holds a ~400MB preamble) rather than orphaning them onto init.
+let shuttingDown = false;
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(signal, () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    for (const store of liveStores) {
+      try {
+        store.save();
+      } catch (err) {
+        console.error('shutdown save failed:', err);
+      }
+    }
+    for (const { store } of detached.values()) {
+      try {
+        store.save();
+      } catch {
+        // best effort
+      }
+    }
+    for (const session of liveClangd) session.dispose();
+    process.exit(0);
+  });
+}

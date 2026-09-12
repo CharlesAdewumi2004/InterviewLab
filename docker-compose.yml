@@ -1,21 +1,21 @@
 services:
-  practice-ide:
+  interview-lab:
     build: .
     ports:
       - "3001:3001"
     environment:
-      # Compose reads .env in this directory automatically — put your token
-      # there (see the auth service below to mint one).
+      # Compose reads .env in this directory automatically. Put your token
+      # there, or mount a host login with the volume below.
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
     volumes:
-      # Sessions and the gradebook survive container rebuilds.
+      # Sessions, grades, your profile and CV survive container rebuilds.
       - ./sessions:/app/sessions
-      # ALTERNATIVE to the token: reuse a Claude Code login from the host by
-      # uncommenting this (then the token can stay empty).
+      # Alternative to the token: reuse a Claude Code login from the host by
+      # uncommenting this line, then leave the token blank.
       # - ~/.claude:/root/.claude
     restart: unless-stopped
 
-  # One-time account linking without installing anything on the host:
+  # One time account linking without installing anything on the host:
   #   docker compose run --rm auth
   # Follow the browser prompts, then copy the printed token into .env as
   #   CLAUDE_CODE_OAUTH_TOKEN=...

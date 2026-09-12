@@ -21,7 +21,7 @@ const MODE_LABELS = {
 // system doc — deterministic formula, not model judgment.
 export default function GradeBanner({ grade }: { grade: GradeSummary }) {
   const parts: string[] = [
-    MODE_LABELS[grade.mode],
+   MODE_LABELS[grade.mode],
     `${grade.durationMin}m`,
     `${grade.runs} run${grade.runs === 1 ? '' : 's'} (${grade.buildFailures} failed)`,
   ];
@@ -57,7 +57,7 @@ export default function GradeBanner({ grade }: { grade: GradeSummary }) {
         </ul>
       )}
       <div className="mt-1 text-[11px] text-neutral-500">
-        Recorded to gradebook — see Progress for trends.
+       Recorded to gradebook, see Progress for trends.
         {grade.gates.length > 0 && ` Provisional (pre-gate): ${grade.provisional}.`}
       </div>
     </div>

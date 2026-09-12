@@ -1,8 +1,9 @@
-import { memo, useEffect, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import MonacoEditor, { type Monaco, type OnMount } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import type { Cursor, Language, Selection } from '../../../shared/protocol';
-import { EDITOR_OPTIONS, setupMonaco } from '../lib/monacoConfig';
+import { DEFAULT_LANGUAGE, LANGUAGES, languageMeta } from '../../../shared/languages';
+import { editorOptionsFor, setupMonaco } from '../lib/monacoConfig';
 
 export interface EditorState {
   buffer: string;
@@ -15,21 +16,26 @@ export interface EditorApi {
   setValue: (value: string) => void;
 }
 
-// Mirrors the server's DEFAULT_BUFFER (session.ts) — the session:ready
-// snapshot overwrites this either way.
-const DEFAULT_BUFFER = `// All standard headers are pre-included and \`using namespace std\` is on
-// (LeetCode-style) — no #includes needed.
-// Paste a rough problem into the left pane to generate a stub and tests,
-// or just write code here and hit Ctrl/Cmd+Enter to compile and run.
+// The same starting buffers the server hands out (shared/languages.ts), so
+// "untouched default" means the same thing on both sides.
+const DEFAULT_BUFFERS = LANGUAGES.map((l) => l.defaultBuffer.trim());
 
-int main() {
-    cout << "hello" << endl;
-    return 0;
+/**
+ * True when the buffer holds no work worth protecting — an untouched language
+ * default or whitespace. A reconnect may overwrite a pristine buffer freely;
+ * anything else is the candidate's code and the client copy wins. Compared
+ * trimmed so a stray trailing newline from a Monaco round trip doesn't read as
+ * real work.
+ */
+export function isPristineBuffer(buffer: string): boolean {
+  const b = buffer.trim();
+  return b === '' || DEFAULT_BUFFERS.includes(b);
 }
-`;
 
 interface Props {
   language: Language;
+  /** A problem is loaded, so the buffer is the solution file the harness calls. */
+  hasProblem: boolean;
   onState: (state: EditorState) => void;
   onRun: () => void;
   onFocusChat: () => void;
@@ -39,7 +45,7 @@ interface Props {
 // Memoized: App re-renders on every streamed chat token, and Monaco is the
 // heaviest subtree — with stable props it skips those renders entirely
 // (language only changes on an explicit toggle).
-export default memo(function Editor({ language, onState, onRun, onFocusChat, onReady }: Props) {
+export default memo(function Editor({ language, hasProblem, onState, onRun, onFocusChat, onReady }: Props) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   // Callbacks live in refs so Monaco commands registered once at mount never
   // capture stale closures.
@@ -110,13 +116,34 @@ export default memo(function Editor({ language, onState, onRun, onFocusChat, onR
     });
   };
 
+  const meta = languageMeta(language);
+  // Recomputed only on a language change; a new object identity on every
+  // render would make Monaco call updateOptions during chat streaming.
+  const options = useMemo(() => editorOptionsFor(meta.monaco), [meta.monaco]);
+
   return (
-    <MonacoEditor
-      language={language}
-      theme="vs-dark"
-      defaultValue={DEFAULT_BUFFER}
-      options={EDITOR_OPTIONS}
-      onMount={handleMount}
-    />
+    <div className="flex h-full flex-col">
+      {/* A real editor tells you what file you are in. It also gives the two
+          shortcuts a home, so they stop being folklore. */}
+      <div className="flex items-center gap-2 border-b border-neutral-800 bg-neutral-900/80 px-3 py-1">
+        <span className="font-mono text-[11px] text-neutral-300">
+          {hasProblem ? 'solution' : 'scratch'}
+          {meta.ext}
+        </span>
+        <span className="text-[11px] text-neutral-600">{meta.label}</span>
+        <div className="flex-1" />
+        <span className="text-[11px] text-neutral-600">Ctrl+Enter run</span>
+        <span className="text-[11px] text-neutral-600">Ctrl+K chat</span>
+      </div>
+      <div className="min-h-0 flex-1">
+        <MonacoEditor
+          language={meta.monaco}
+          theme="vs-dark"
+          defaultValue={languageMeta(DEFAULT_LANGUAGE).defaultBuffer}
+          options={options}
+          onMount={handleMount}
+        />
+      </div>
+    </div>
   );
 });

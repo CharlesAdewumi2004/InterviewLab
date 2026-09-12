@@ -15,7 +15,7 @@ Companion to the Mock Interview Process Spec. This defines exactly how every ses
 1. **Behaviorally anchored.** Every score point is tied to a written description of observable behaviour, never an adjective. The grader compares what happened against the anchor, not against intuition or a previous session.
 2. **Evidence before judgment.** No score is assigned without at least two specific behavioural observations (what was said/done, verbatim where useful). If there's no evidence, the axis is marked *Not Observed*, never guessed.
 3. **Independent axes.** Each axis is scored on its own. A brilliant algorithm does not buy back silent grinding; strong narration does not buy back a broken solution.
-4. **Signal over correctness.** *How* the answer was reached (decomposition, narration, self-correction, hint uptake, testing) carries as much weight as the answer itself — but correctness is still a hard requirement, not optional (Bloomberg explicitly rejects the myth that communication alone carries you).
+4. **Signal over correctness.** *How* the answer was reached (decomposition, narration, self-correction, hint uptake, testing) carries as much weight as the answer itself — but correctness is still a hard requirement, not optional (the company explicitly rejects the myth that communication alone carries you).
 5. **No mid-session averaging.** Scores are assigned only in the debrief, from notes.
 
 ---
@@ -37,7 +37,7 @@ Half-points (e.g., 2.5) are allowed only when evidence genuinely straddles two a
 
 ## 3. Axes, Anchors, and Weights
 
-Weights reflect Bloomberg's documented emphasis: coding competence is the baseline; communication, hint uptake, and fit differentiate.
+Weights reflect what interview debriefs across the industry consistently emphasise: coding competence is the baseline; communication, hint uptake, and fit differentiate.
 
 ### Coding sessions (Question Practice — axes A–D)
 
@@ -125,12 +125,12 @@ argued (pattern vs simplicity), SOLID violations self-caught.
 - **4:** All of 3, plus compares multiple viable approaches with trade-offs (constant factors, memory locality, practical considerations) and picks deliberately.
 - *Hard rule:* a wrong complexity claim left uncorrected by the candidate caps C at 2. Self-corrected before the interviewer flags it: no cap.
 
-**Axis D — Communication, collaboration & hint uptake** *(Bloomberg-weighted)*
+**Axis D — Communication, collaboration & hint uptake** *(heavily weighted)*
 - **1:** Silent grinding (>30s gaps, repeatedly) or unstructured rambling; ignores or resists interviewer input; reasoning cannot be followed.
 - **2:** Explains when asked; absorbs hints slowly or partially; loses the thread under pressure; needed the "keep talking" interrupt more than once.
 - **3:** Thinks aloud continuously at intent/invariant level; listens; integrates hints quickly and credits them; corrects course without ego; executes the recovery protocol when blanked.
 - **4:** All of 3, plus genuine pair-work: checks in at decision points, invites challenge, hands ambiguity back with structure.
-- *Hint-uptake sub-score (logged separately, folds into D):* for each hint given, record level (1–4), latency to integration, and completeness. Rough guide: needed only level-1/2 hints and integrated immediately → no penalty; needed a level-4 hint → D capped at 3; resisted or argued past a correct hint → D capped at 2 (this is a documented Bloomberg rejection cause).
+- *Hint-uptake sub-score (logged separately, folds into D):* for each hint given, record level (1–4), latency to integration, and completeness. Rough guide: needed only level-1/2 hints and integrated immediately → no penalty; needed a level-4 hint → D capped at 3; resisted or argued past a correct hint → D capped at 2 (this is a documented the company rejection cause).
 - *Narration channel:* think-aloud is captured by the ambient narration mic (timestamped, separate from chat). D's continuity anchors — "silent grinding" and "thinks aloud continuously" — are scored **only from the narration timeline within mic-on spans**. When the channel was off, absence of narration is absence of evidence, never evidence of silence: D is scored from chat-visible collaboration evidence alone (hint uptake, integration of interviewer input, written check-ins), and if that yields fewer than two specific observations, D is *Not Observed* and its weight is renormalized away (per Principle 2).
 
 **Axis E — System design**
@@ -139,10 +139,10 @@ argued (pattern vs simplicity), SOLID violations self-caught.
 - **3:** Gathers requirements and load estimates; justified architecture; explicit trade-offs (latency vs throughput, consistency vs availability, delivery semantics); addresses failure and recovery.
 - **4:** All of 3, plus quantified reasoning (latency budgets, capacity math), evolution under changed requirements, domain-appropriate judgment (e.g., ordering guarantees for market data).
 
-**Axis F — Motivation & fit** *(Bloomberg-weighted)*
+**Axis F — Motivation & fit** *(heavily weighted)*
 - **1:** Generic or contradictory motivation; no curiosity back; behavioral answers are vague "we" stories with no personal role.
 - **2:** Plausible but interchangeable motivation ("great engineering, good culture"); STAR answers lack specifics or measurable outcomes.
-- **3:** Specific, credible motivation tied to Bloomberg's product/domain; STAR answers with clear personal actions, outcomes, lessons; asks informed questions back.
+- **3:** Specific, credible motivation tied to the company's actual product or domain; STAR answers with clear personal actions, outcomes, lessons; asks informed questions back.
 - **4:** All of 3, plus survives deep probing on own past decisions (why, what failed, what they'd change) with visible genuine domain engagement.
 - *Auto-caps:* "salary/prestige"-shaped motivation → F ≤ 2. Answer that would fit any tech company unchanged → F ≤ 2. Hiding behind "we" after the "what did *you* do?" probe → F ≤ 2.
 
@@ -188,12 +188,12 @@ Compute the weighted average, then apply gates:
 |---|---|
 | ≥ 3.5 | Strong Hire |
 | 3.0 – 3.49 | Hire |
-| 2.5 – 2.99 | Lean No Hire (borderline — D and F decide, per Bloomberg pattern) |
+| 2.5 – 2.99 | Lean No Hire (borderline — D and F decide) |
 | < 2.5 | No Hire |
 
 **Gates (applied after the average):**
 1. Any axis at 1 → recommendation cannot exceed Lean No Hire.
-2. D ≤ 2 → cannot exceed Lean No Hire regardless of technical scores (technically-clean loops fail on this at Bloomberg).
+2. D ≤ 2 → cannot exceed Lean No Hire regardless of technical scores (technically-clean loops fail on this routinely).
 3. B ≤ 2 on both problems in a session → No Hire (correctness is the baseline).
 4. Any red flag → at best Lean No Hire.
 5. In the 2.5–2.99 band, D and F act as tiebreakers: both ≥ 3 → round up to Hire; either ≤ 2 → round down to No Hire.

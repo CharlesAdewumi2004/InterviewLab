@@ -38,7 +38,7 @@ export default function ScorecardView({ scorecard, grade, onClose }: Props) {
         <div className="mb-4 flex items-start justify-between">
           <h2 className="text-lg font-semibold text-neutral-100">Session scorecard</h2>
           <button autoFocus onClick={onClose} className="rounded bg-neutral-800 px-3 py-1 text-sm hover:bg-neutral-700">
-            Close
+           Close
           </button>
         </div>
 
@@ -48,7 +48,7 @@ export default function ScorecardView({ scorecard, grade, onClose }: Props) {
 
         <section className="mb-4 space-y-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-            Axis scores (evidence first)
+           Axis scores (evidence first)
           </h3>
           {scorecard.axes.map((a) => (
             <div key={a.axis} className="flex items-start gap-3 rounded bg-neutral-800 p-2">
@@ -67,7 +67,7 @@ export default function ScorecardView({ scorecard, grade, onClose }: Props) {
         {scorecard.design_review && (
           <section className="mb-4">
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              Delivery framework review (§8)
+             Delivery framework review (§8)
               <span className="ml-2 rounded bg-blue-900/60 px-2 py-0.5 text-[10px] font-semibold normal-case text-blue-200">
                 level signal: {scorecard.design_review.level_signal}
               </span>
@@ -106,7 +106,7 @@ export default function ScorecardView({ scorecard, grade, onClose }: Props) {
         {scorecard.knowledge_review && (
           <section className="mb-4">
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              Knowledge review (§10)
+             Knowledge review (§10)
             </h3>
             <div className="mb-2 space-y-1.5">
               {scorecard.knowledge_review.items.map((item, i) => (
@@ -136,7 +136,7 @@ export default function ScorecardView({ scorecard, grade, onClose }: Props) {
             {scorecard.knowledge_review.debug && (
               <div className="mt-2 rounded bg-neutral-800/70 p-2 text-xs text-neutral-400">
                 <div className="mb-1 font-semibold text-neutral-300">
-                  Debug exercise
+                 Debug exercise
                   {scorecard.knowledge_review.debug.perfGatePassed !== null && (
                     <span
                       className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${
@@ -180,10 +180,10 @@ export default function ScorecardView({ scorecard, grade, onClose }: Props) {
               {scorecard.hints.map((h, i) => (
                 <li key={i} className="flex items-baseline gap-2">
                   <span className="shrink-0 rounded bg-neutral-800 px-1.5 py-0.5 font-mono text-[10px] text-neutral-400">
-                    L{h.level}
+                   L{h.level}
                   </span>
                   <span>
-                    <span className="text-neutral-400">“{h.hint}”</span> — {h.uptake}
+                    <span className="text-neutral-400">“{h.hint}”</span>, {h.uptake}
                   </span>
                 </li>
               ))}
@@ -194,7 +194,7 @@ export default function ScorecardView({ scorecard, grade, onClose }: Props) {
         {scorecard.clarifications && (
           <section className="mb-4">
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              Clarification checklist (unprompted)
+             Clarification checklist (unprompted)
             </h3>
             <div className="flex flex-wrap gap-1.5">
               {CLARIFICATION_LABELS.map(([key, label]) => {
@@ -206,7 +206,7 @@ export default function ScorecardView({ scorecard, grade, onClose }: Props) {
                       hit ? 'bg-green-900/50 text-green-200' : 'bg-neutral-800 text-neutral-500'
                     }`}
                   >
-                    {hit ? '✓' : '✗'} {label}
+                    {hit ? '' : ''} {label}
                   </span>
                 );
               })}
@@ -259,7 +259,7 @@ export default function ScorecardView({ scorecard, grade, onClose }: Props) {
         <div className="mb-4 grid grid-cols-2 gap-4">
           <section className="rounded border border-blue-900 bg-blue-950/40 p-3">
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-400">
-              Highest-leverage fix
+             Highest-leverage fix
             </h3>
             <p className="text-sm text-neutral-200">{scorecard.highest_leverage_fix}</p>
           </section>

@@ -14,7 +14,7 @@ export default memo(function Console({ compiling, build, tests }: Props) {
       {compiling && <div className="text-yellow-400">compiling…</div>}
 
       {!compiling && !build && (
-        <div className="text-neutral-600">Console — hit Ctrl/Cmd+Enter or the Run button to compile.</div>
+        <div className="text-neutral-600">Console, hit Ctrl/Cmd+Enter or the Run button to compile.</div>
       )}
 
       {!compiling && build && (

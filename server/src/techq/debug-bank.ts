@@ -1,4 +1,5 @@
 import type { Language, TechTopic } from '../../../shared/protocol';
+import { languageMeta } from '../../../shared/languages';
 import type { ServerProblem } from '../types.js';
 
 // Debug-&-optimize exercises: deliberately flawed programs the candidate must
@@ -908,6 +909,7 @@ export function listDebugExercises(): { id: string; title: string; topic: TechTo
 // never in constraints, which are revealable on request.
 export function debugToProblem(ex: DebugExercise): ServerProblem {
   return {
+    language: ex.language,
     title: ex.title,
     statement: ex.scenario,
     signature: ex.code,
@@ -926,7 +928,7 @@ export function debugToProblem(ex: DebugExercise): ServerProblem {
 
 function debugBriefText(ex: DebugExercise): string {
   return [
-    `DEBUG EXERCISE (${ex.language === 'cpp' ? 'C++' : 'Python'} · ${ex.topic}). The candidate must find the planted issues by reading, then fix and optimize until all tests pass — including the timed performance case.`,
+    `DEBUG EXERCISE (${languageMeta(ex.language).label} · ${ex.topic}). The candidate must find the planted issues by reading, then fix and optimize until all tests pass — including the timed performance case.`,
     `PLANTED ISSUES — the answer key for the find phase. Never reveal, confirm, or count them; challenge false claims with "show me how that fails":\n${ex.plantedIssues
       .map((p) => `- [${p.category}/${p.severity}] line ${p.line}: ${p.issue}`)
       .join('\n')}`,

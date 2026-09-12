@@ -1,10 +1,23 @@
 // WebSocket protocol shared between client and server.
 
+import type { Language } from './languages';
+
+export type { Language };
+
 // interviewer = technical coding round; sysdesign and behavioral are
 // dedicated round types (each grades into its own §3 mode via axes E/F).
 // techq = technical-knowledge drills (verbal + escalations + debug exercises);
-// oopdesign = low-level OOP design, talk-then-code.
-export type Persona = 'interviewer' | 'sysdesign' | 'behavioral' | 'tutor' | 'bloomberg' | 'techq' | 'oopdesign';
+// oopdesign = low-level OOP design, talk-then-code; mock = the full loop
+// simulation (intro, two coding questions, your questions back, debrief).
+export type Persona = 'interviewer' | 'sysdesign' | 'behavioral' | 'tutor' | 'mock' | 'techq' | 'oopdesign';
+
+// Sessions and gradebook rows written before a persona was renamed still hold
+// the old id; normalize on read so history keeps rendering.
+const PERSONA_ALIASES: Record<string, Persona> = { bloomberg: 'mock' };
+
+export function normalizePersona(value: string): Persona {
+  return PERSONA_ALIASES[value] ?? (value as Persona);
+}
 
 // Topic chips for the tech-knowledge round — mirror the bank's topic keys.
 export type TechTopic =
@@ -15,9 +28,13 @@ export type TechTopic =
   | 'lowlevel'
   | 'concurrency'
   | 'dsinternals'
-  | 'data';
-
-export type Language = 'cpp' | 'python';
+  | 'data'
+  | 'web'
+  | 'security'
+  | 'testing'
+  | 'devops'
+  // Language internals: sampled for the session's own language only.
+  | 'langint';
 
 export interface Selection {
   startLine: number;
@@ -311,12 +328,21 @@ export type ServerMessage =
   // Sent on every (re)connect. `resumed` means the server re-attached a
   // detached session (reconnect/refresh): the snapshot fields restore the
   // client UI so a network blip no longer wipes a 40-minute interview.
+  //
+  // `reason` says WHY the snapshot arrived, which decides who wins when the
+  // client and server disagree about the buffer. On 'connect' the browser's
+  // Monaco buffer is by construction at least as new as the server's, so the
+  // client is authoritative; on 'language' and 'reset' the user asked the
+  // server to change the buffer, so the server is. Required, not optional:
+  // shipping the client half of this without the server half must fail to
+  // compile rather than silently restore the clobbering behaviour.
   | {
       type: 'session:ready';
       sessionId: string;
       persona: Persona;
       language: Language;
       resumed: boolean;
+      reason: 'connect' | 'language' | 'reset';
       startedAt: number;
       problem: ClientProblem | null;
       buffer: string;

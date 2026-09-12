@@ -1,3 +1,6 @@
+// Bundles Monaco locally (no CDN, real language workers) before anything
+// renders. Side-effect import: keep it first.
+import './lib/monacoSetup';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';

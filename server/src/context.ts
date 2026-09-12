@@ -4,11 +4,13 @@ import { designBriefBlock, getDesignQuestion } from './sysdesign/bank.js';
 import { getTechQuestion, techRoundBlock } from './techq/bank.js';
 import { oopBriefBlock, getOopQuestion } from './oop/bank.js';
 import { getCv } from './cv.js';
+import { languageMeta } from '../../shared/languages';
+import { profileBlock } from './profile.js';
 import { INTERVIEWER_PROMPT } from './prompts/interviewer.js';
 import { TUTOR_PROMPT } from './prompts/tutor.js';
-import { BLOOMBERG_PROMPT } from './prompts/bloomberg.js';
+import { mockPrompt } from './prompts/mock.js';
 import { SYSDESIGN_PROMPT } from './prompts/sysdesign.js';
-import { BEHAVIORAL_PROMPT } from './prompts/behavioral.js';
+import { behavioralPrompt } from './prompts/behavioral.js';
 import { TECHQ_PROMPT } from './prompts/techq.js';
 import { OOP_PROMPT } from './prompts/oop.js';
 
@@ -40,24 +42,46 @@ function clockIn(session: Session, at: number): string {
 // Session-fixed prompt for the persistent chat session: persona + formatted
 // problem + hidden brief (interviewer personas only). Changing persona or
 // problem restarts the session with a fresh prompt.
+function personaPromptFor(persona: Session['persona']): string {
+  switch (persona) {
+    case 'interviewer':
+      return INTERVIEWER_PROMPT;
+    case 'sysdesign':
+      return SYSDESIGN_PROMPT;
+    case 'behavioral':
+      return behavioralPrompt();
+    case 'mock':
+      return mockPrompt();
+    case 'tutor':
+      return TUTOR_PROMPT;
+    case 'techq':
+      return TECHQ_PROMPT;
+    case 'oopdesign':
+      return OOP_PROMPT;
+  }
+}
+
 export function buildSystemPrompt(session: Session): string {
   const blocks: string[] = [];
-  const personaPrompt = {
-    interviewer: INTERVIEWER_PROMPT,
-    sysdesign: SYSDESIGN_PROMPT,
-    behavioral: BEHAVIORAL_PROMPT,
-    bloomberg: BLOOMBERG_PROMPT,
-    tutor: TUTOR_PROMPT,
-    techq: TECHQ_PROMPT,
-    oopdesign: OOP_PROMPT,
-  }[session.persona];
-  blocks.push(personaPrompt);
+  blocks.push(personaPromptFor(session.persona));
 
-  if (session.language === 'python') {
-    blocks.push(
-      'NOTE: this session is in PYTHON, not C++. Judge idiomatic Python (comprehensions, generators, dict/set fluency, standard-library reach) at the same bar — any C++-specific calibration in your instructions maps to its Python equivalent.',
-    );
+  // The interviewer personas carry their own candidate context; the rest get
+  // the profile here so the level bar is the same in every round type.
+  if (session.persona !== 'tutor' && session.persona !== 'behavioral' && session.persona !== 'mock') {
+    const profile = profileBlock();
+    if (profile) blocks.push(profile);
   }
+
+  // House style for every reply, in one place: the transcript reads like a
+  // person typing in a chat window, not a model formatting a document.
+  blocks.push(
+    'STYLE: write plain text. No emoji, ever. No em dashes or en dashes anywhere: use a comma, a colon, or a second sentence instead. Keep formatting minimal; code goes in fenced blocks, everything else is prose.',
+  );
+
+  const meta = languageMeta(session.language);
+  blocks.push(
+    `SESSION LANGUAGE: the candidate is working in ${meta.label}. Judge idiomatic ${meta.label} — its standard library, its conventions, the abstractions a strong ${meta.label} engineer reaches for — at the same bar, and map any language-specific calibration in your instructions onto its ${meta.label} equivalent. Never suggest they switch languages.`,
+  );
 
   // Sysdesign persona with a bank question active: inject its private ground
   // truth (requirements answer key, expected design, deep dives, level bars).
@@ -82,9 +106,9 @@ export function buildSystemPrompt(session: Session): string {
     if (q) blocks.push(oopBriefBlock(q));
   }
 
-  // Behavioral/Bloomberg: the uploaded CV, so the interviewer has actually
-  // read the resume — real behavioral rounds are grounded in it.
-  if (session.persona === 'behavioral' || session.persona === 'bloomberg') {
+  // Behavioral and full-mock rounds: the uploaded CV, so the interviewer has
+  // actually read the resume — real behavioral rounds are grounded in it.
+  if (session.persona === 'behavioral' || session.persona === 'mock') {
     const cv = getCv();
     if (cv) {
       blocks.push(

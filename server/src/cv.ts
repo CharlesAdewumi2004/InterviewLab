@@ -3,7 +3,7 @@ import path from 'node:path';
 import { SESSIONS_DIR } from './session.js';
 
 // The candidate's CV: uploaded once (PDF or plain text), extracted to text,
-// stored locally (git-ignored) and injected into the behavioral/Bloomberg
+// stored locally (git-ignored) and injected into the behavioral and full-mock
 // personas' context so the interviewer has actually "read the resume".
 
 const CV_PATH = path.join(SESSIONS_DIR, 'cv.txt');

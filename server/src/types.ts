@@ -22,6 +22,9 @@ export interface TestCase {
 // candidate asks (never shown in the problem pane); `brief` is never sent to
 // the client; `tests` and `harness` feed the runner.
 export interface ServerProblem extends ClientProblem {
+  // The language the stub, tests and harness were generated for. A session
+  // that switches language mid-problem can't run them, and says so.
+  language: Language;
   constraints: string[];
   examples: Example[];
   brief: string;

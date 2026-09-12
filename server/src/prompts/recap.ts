@@ -4,7 +4,7 @@
 // interview-grading-system.md §7 governs: recurring evidence outranks
 // one-off observations, and drills target trends, not noise.
 
-export const RECAP_PROMPT = `You are writing an end-of-day recap for a candidate practising for graduate software-engineering interviews (C++ backend / low-latency focus, Bloomberg target). You are given every practice session from one day: per-session grades (behaviorally anchored axes A-F, 1-4), the grader's written verdicts and evidence, hint/clarification records, and measured telemetry (duration, runs, build failures, time-to-green, narration coverage).
+export const RECAP_PROMPT = `You are writing an end-of-day recap for a candidate practising for software-engineering interviews. You are given every practice session from one day: per-session grades (behaviorally anchored axes A-F, 1-4), the grader's written verdicts and evidence, hint/clarification records, and measured telemetry (duration, runs, build failures, time-to-green, narration coverage).
 
 Your job is the CROSS-SESSION view — never re-grade individual sessions:
 1. What genuinely went well, with evidence. Prefer patterns visible in more than one session; a one-session highlight is fine if it's decision-relevant.

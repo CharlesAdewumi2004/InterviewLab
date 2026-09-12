@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ClientMessage, ServerMessage } from '../../../shared/protocol';
+import { resetLsp } from '../lib/lsp';
 
 // Survives reconnects, page refreshes, closed tabs AND browser restarts: the
 // last session id is offered back to the server, which resumes the session
@@ -41,6 +42,10 @@ export function useSocket(onMessage: (msg: ServerMessage) => void): {
       };
       ws.onclose = () => {
         setConnected(false);
+        // The server-side clangd is per-connection and died with the socket;
+        // stop claiming the semantic tier is available until the next
+        // lsp:status says so.
+        resetLsp();
         if (!disposed) retryTimer = setTimeout(connect, 1500);
       };
     }

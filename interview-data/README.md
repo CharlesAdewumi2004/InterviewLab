@@ -15,8 +15,8 @@ of other people's interviews don't belong in a public repo.
    wording is the gold — terse acknowledgments, how they answer clarifying
    questions, when they stay silent, how they redirect.
 2. **Outcome-labeled reports** — "here's what happened, and I passed/failed."
-   Glassdoor / Blind / Reddit interview reports, especially Bloomberg
-   grad-SWE ones. These ground *what interviewers are actually looking for*.
+   Glassdoor, Blind and Reddit interview reports, ideally for the kind of
+   role you are targeting. These ground *what interviewers are actually looking for*.
 3. **Debrief/feedback text** — anything an interviewer said or wrote about a
    candidate afterwards (including the feedback section of mock videos).
    This is direct rubric evidence.
@@ -32,7 +32,7 @@ different interviewer temperaments (cold, chatty, impatient).
 Start each file with whatever you know of this (skip unknowns):
 
 ```
-company: Bloomberg
+company: Example Corp
 role: grad SWE
 round: phone screen | onsite | behavioral | code review | mock
 source: <URL or "own interview" or "friend's report">

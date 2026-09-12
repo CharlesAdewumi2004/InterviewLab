@@ -15,7 +15,7 @@ import type {
   Turn,
 } from '../../shared/protocol';
 import { rememberSessionId, useSocket } from './hooks/useSocket';
-import Editor, { type EditorApi, type EditorState } from './components/Editor';
+import Editor, { isPristineBuffer, type EditorApi, type EditorState } from './components/Editor';
 import ChatPane from './components/ChatPane';
 import ProblemPane from './components/ProblemPane';
 import Console from './components/Console';
@@ -24,11 +24,16 @@ import WorkspaceBar from './components/WorkspaceBar';
 import HomePage from './components/HomePage';
 import ScorecardView from './components/ScorecardView';
 import ProgressView from './components/ProgressView';
+import SetupPage from './components/SetupPage';
 import { useHashRoute } from './hooks/useHashRoute';
 import { NarrationCapture, SentenceSpeaker } from './lib/voice';
 import { bindLspSend, handleLspMessage } from './lib/lsp';
 
 type DebriefState = { scorecard: Scorecard; grade: GradeSummary } | null;
+
+// Personas that belong to the coding workspace, as opposed to a page that
+// pins its own (design, OOP, tech, behavioral).
+const CODING_PERSONAS: Persona[] = ['interviewer', 'mock', 'tutor'];
 
 export default function App() {
   const [persona, setPersona] = useState<Persona>('interviewer');
@@ -44,6 +49,10 @@ export default function App() {
   const [streamText, setStreamText] = useState<string | null>(null);
   const [chatBusy, setChatBusy] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  // Set when a reconnect landed on a session the server could not resume while
+  // the editor held real work: the code was kept, but the clock and transcript
+  // belong to a new session, and the user should know rather than discover it.
+  const [sessionRecreated, setSessionRecreated] = useState(false);
 
   const [compiling, setCompiling] = useState(false);
   const [build, setBuild] = useState<BuildResult | null>(null);
@@ -122,12 +131,23 @@ export default function App() {
         const editor = editorApiRef.current;
         if (!editor) {
           pendingBufferRef.current = msg.buffer; // Monaco mounts later
-        } else if (msg.resumed) {
-          // Live reconnect: the editor may hold keystrokes newer than the
-          // server's debounced copy — the client is authoritative, push it.
-          sendRef.current({ type: 'editor:state', ...editor.getState() });
-        } else {
+        } else if (msg.reason !== 'connect') {
+          // Language toggle or explicit reset: the user asked the server to
+          // change the buffer, so the server's copy wins.
           editor.setValue(msg.buffer);
+        } else if (isPristineBuffer(editor.getState().buffer)) {
+          // Nothing typed yet — no work to lose, take the server snapshot.
+          editor.setValue(msg.buffer);
+        } else {
+          // A (re)connect with real code in the editor. The browser's buffer is
+          // by construction at least as new as anything the server holds (the
+          // server's copy is debounced), so the client is authoritative — push
+          // it up rather than overwriting it. Keying this on `reason` and not
+          // on `resumed` is deliberate: a server restart legitimately answers
+          // resumed=false, and the old code overwrote the candidate's live
+          // code with the default buffer every time that happened.
+          sendRef.current({ type: 'editor:state', ...editor.getState() });
+          if (!msg.resumed) setSessionRecreated(true);
         }
         break;
       }
@@ -281,7 +301,7 @@ export default function App() {
   const handlePause = useCallback(() => {
     const next = !pausedRef.current;
     if (!send({ type: 'session:pause', paused: next })) {
-      setChatError('Not connected — cannot pause/resume right now.');
+      setChatError('Not connected, cannot pause/resume right now.');
       return;
     }
     setPauseState((p) =>
@@ -298,11 +318,11 @@ export default function App() {
   const handleRun = useCallback(() => {
     const state = editorApiRef.current?.getState();
     if (!state) {
-      setChatError('The editor is still loading — give it a second.');
+      setChatError('The editor is still loading, give it a second.');
       return;
     }
     if (!send({ type: 'run', buffer: state.buffer })) {
-      setChatError('Not connected — reconnecting. Try Run again in a moment.');
+      setChatError('Not connected, reconnecting. Try Run again in a moment.');
     }
   }, [send]);
 
@@ -313,13 +333,13 @@ export default function App() {
     (content: string): boolean => {
       const state = editorApiRef.current?.getState();
       if (!state) {
-        setChatError('The editor is still loading — give it a second.');
+        setChatError('The editor is still loading, give it a second.');
         return false;
       }
       if (chatBusyRef.current) return false; // double-send guard (Enter + PTT race)
       // Bundle the live editor state so the model never sees a stale buffer.
       if (!send({ type: 'chat:send', content, ...state, voice: voiceModeRef.current })) {
-        setChatError('Not connected — reconnecting. Your message was not sent.');
+        setChatError('Not connected, reconnecting. Your message was not sent.');
         return false;
       }
       setChatError(null);
@@ -362,7 +382,7 @@ export default function App() {
   const handleIntake = useCallback(
     (raw: string, delivery: 'text' | 'oral', framing: 'scenario' | 'plain') => {
       if (!send({ type: 'problem:intake', raw, delivery, framing, voice: voiceModeRef.current })) {
-        setIntakeError('Not connected — reconnecting. Try again in a moment.');
+        setIntakeError('Not connected, reconnecting. Try again in a moment.');
         return;
       }
       setIntakeLoading(true);
@@ -374,7 +394,7 @@ export default function App() {
   const handleTechStart = useCallback(
     (topics: TechTopic[]) => {
       if (!send({ type: 'techq:start', topics })) {
-        setChatError('Not connected — reconnecting. Try starting again in a moment.');
+        setChatError('Not connected, reconnecting. Try starting again in a moment.');
       }
     },
     [send],
@@ -383,7 +403,7 @@ export default function App() {
   const handleDebugPick = useCallback(
     (id?: string) => {
       if (!send({ type: 'debug:pick', id })) {
-        setChatError('Not connected — reconnecting. Try picking again in a moment.');
+        setChatError('Not connected, reconnecting. Try picking again in a moment.');
       }
     },
     [send],
@@ -392,7 +412,7 @@ export default function App() {
   const handleOopPick = useCallback(
     (id?: string) => {
       if (!send({ type: 'oop:pick', id })) {
-        setChatError('Not connected — reconnecting. Try picking again in a moment.');
+        setChatError('Not connected, reconnecting. Try picking again in a moment.');
       }
     },
     [send],
@@ -400,7 +420,7 @@ export default function App() {
 
   const handleEndSession = useCallback(() => {
     if (!send({ type: 'session:end' })) {
-      setChatError('Not connected — cannot end the session right now.');
+      setChatError('Not connected, cannot end the session right now.');
       return;
     }
     setEndingSession(true);
@@ -415,7 +435,7 @@ export default function App() {
       return;
     }
     if (!send({ type: 'session:reset' })) {
-      setChatError('Not connected — cannot reset the session right now.');
+      setChatError('Not connected, cannot reset the session right now.');
     }
     // The fresh session:ready that follows resets all client state.
   }, [send]);
@@ -425,11 +445,11 @@ export default function App() {
   // and on fresh sessions (sessionEpoch), guarded to avoid redundant sends.
   const lastCodingPersonaRef = useRef<Persona>('interviewer');
   useEffect(() => {
-    if (['interviewer', 'bloomberg', 'tutor'].includes(persona)) lastCodingPersonaRef.current = persona;
+    if (CODING_PERSONAS.includes(persona)) lastCodingPersonaRef.current = persona;
   }, [persona]);
   useEffect(() => {
     if (!connected) return;
-    const coding = ['interviewer', 'bloomberg', 'tutor'].includes(personaRef.current);
+    const coding = CODING_PERSONAS.includes(personaRef.current);
     const want =
       route === 'design'
         ? 'sysdesign'
@@ -454,7 +474,7 @@ export default function App() {
   const handleDesignPick = useCallback(
     (id?: string) => {
       if (!send({ type: 'design:pick', id })) {
-        setChatError('Not connected — reconnecting. Try picking again in a moment.');
+        setChatError('Not connected, reconnecting. Try picking again in a moment.');
       }
     },
     [send],
@@ -482,6 +502,7 @@ export default function App() {
     <div className="flex h-full flex-col">
       <NavBar
         route={route}
+        inSession={inWorkspace}
         connected={connected}
         startedAt={startedAt}
         paused={pauseState.paused}
@@ -509,9 +530,32 @@ export default function App() {
           <ProgressView asPage />
         </div>
       )}
+      {route === 'setup' && (
+        <div className="min-h-0 flex-1">
+          <SetupPage onCvUpdated={handleCvUpdated} />
+        </div>
+      )}
 
-      {/* The workspace stays MOUNTED across navigation — Monaco's buffer and
-          the live session must survive page switches — pages only toggle
+      {sessionRecreated && inWorkspace && (
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 border-b border-amber-800/60 bg-amber-950/60 px-3 py-1.5 text-xs text-amber-200"
+        >
+          <span>
+            The server restarted and this session could not be resumed, your code was kept, but the clock and
+            transcript started over.
+          </span>
+          <button
+            onClick={() => setSessionRecreated(false)}
+            className="shrink-0 rounded px-2 py-0.5 text-amber-300/80 hover:bg-amber-900/60 hover:text-amber-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* The workspace stays MOUNTED across navigation, Monaco's buffer and
+          the live session must survive page switches, pages only toggle
           visibility. Design mode hides the console (whiteboard); behavioral
           hides editor+problem and centers the chat. */}
       <div className={`min-h-0 flex-1 flex-col ${inWorkspace ? 'flex' : 'hidden'}`}>
@@ -537,6 +581,7 @@ export default function App() {
               designQuestion={designQuestion}
               techTopics={techTopics}
               oopQuestion={oopQuestion}
+              sessionEpoch={sessionEpoch}
               onIntake={handleIntake}
               onDesignPick={handleDesignPick}
               onTechStart={handleTechStart}
@@ -549,6 +594,7 @@ export default function App() {
             <div className="min-h-0 flex-[3]">
               <Editor
                 language={language}
+                hasProblem={problem !== null}
                 onState={handleEditorState}
                 onRun={handleRun}
                 onFocusChat={handleFocusChat}

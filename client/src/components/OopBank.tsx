@@ -1,9 +1,12 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useState } from 'react';
 import type { OopMeta } from '../../../shared/protocol';
+import { useApi } from '../hooks/useApi';
 
 interface Props {
   oopQuestion: OopMeta | null;
   onOopPick: (id?: string) => void;
+  /** Bumps when the server re-announces a session — refetch the bank then. */
+  sessionEpoch: number;
 }
 
 const DIFF_COLORS: Record<OopMeta['difficulty'], string> = {
@@ -14,17 +17,10 @@ const DIFF_COLORS: Record<OopMeta['difficulty'], string> = {
 
 // OOP design bank: mirror of the sysdesign bank pane — pick a question (or
 // randomize) and the interviewer states it in chat; the brief stays private.
-export default memo(function OopBank({ oopQuestion, onOopPick }: Props) {
-  const [bank, setBank] = useState<OopMeta[] | null>(null);
-  const [bankError, setBankError] = useState<string | null>(null);
+export default memo(function OopBank({ oopQuestion, onOopPick, sessionEpoch }: Props) {
+  const { data, error: bankError, retry } = useApi<{ questions: OopMeta[] }>('/api/oop-questions', sessionEpoch);
+  const bank = data?.questions ?? null;
   const [changing, setChanging] = useState(false);
-
-  useEffect(() => {
-    fetch('/api/oop-questions')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((data: { questions: OopMeta[] }) => setBank(data.questions))
-      .catch((err) => setBankError(err instanceof Error ? err.message : String(err)));
-  }, []);
 
   if (oopQuestion && !changing) {
     return (
@@ -35,7 +31,7 @@ export default memo(function OopBank({ oopQuestion, onOopPick }: Props) {
             onClick={() => setChanging(true)}
             className="shrink-0 rounded bg-neutral-800 px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-700"
           >
-            Change
+           Change
           </button>
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -50,13 +46,13 @@ export default memo(function OopBank({ oopQuestion, onOopPick }: Props) {
         </div>
         <p className="text-xs text-neutral-500">{oopQuestion.asks}</p>
         <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
-          🗣 The interviewer stated the prompt in chat — deliberately underspecified; scope is yours to extract by
-          asking.
+          The interviewer stated the prompt in chat. The spec is incomplete on purpose: ask. Questions about what
+          the software must do get answered straight; what the classes and methods are is yours to decide.
         </p>
         <div className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-600">
-          Talk first (you drive it): scope → core classes with one-line responsibilities → key interfaces → where
-          behaviour varies (patterns earn their keep here). Then implement the skeleton in the editor — classes,
-          signatures, ownership; bodies only where trivial. ▶ Run compiles it.
+         Talk first (you drive it): scope, then core classes with one-line responsibilities, then key interfaces, then where
+          behaviour varies (patterns earn their keep here). Then implement the skeleton in the editor, classes,
+          signatures, ownership; bodies only where trivial. Run compiles it.
         </div>
       </div>
     );
@@ -73,10 +69,17 @@ export default memo(function OopBank({ oopQuestion, onOopPick }: Props) {
           }}
           className="rounded bg-blue-700 px-2.5 py-1 text-xs font-medium hover:bg-blue-600"
         >
-          🎲 Random
+          Random
         </button>
       </div>
-      {bankError && <div className="rounded bg-red-900/40 px-2 py-1 text-xs text-red-300">{bankError}</div>}
+      {bankError && (
+        <div className="flex items-center justify-between gap-2 rounded bg-red-900/40 px-2 py-1 text-xs text-red-300">
+          <span>{bankError}</span>
+          <button onClick={retry} className="shrink-0 rounded bg-red-800/60 px-2 py-0.5 hover:bg-red-700/60">
+           Retry
+          </button>
+        </div>
+      )}
       {!bank && !bankError && <p className="text-xs text-neutral-500">Loading bank…</p>}
       {bank && (
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
