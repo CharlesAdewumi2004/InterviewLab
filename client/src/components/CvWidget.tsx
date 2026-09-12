@@ -88,14 +88,14 @@ export default function CvWidget({
           {status?.present && (
             <>
               <span className="text-xs text-green-400">
-                On file · {(status.chars / 1000).toFixed(1)}k characters
+               On file · {(status.chars / 1000).toFixed(1)}k characters
               </span>
               <button onClick={() => void remove()} className="text-xs text-neutral-500 hover:text-red-300">
                 remove
               </button>
             </>
           )}
-          {!status?.present && <span className="text-xs text-neutral-500">PDF, .txt or .md — optional</span>}
+          {!status?.present && <span className="text-xs text-neutral-500">PDF, .txt or .md, optional</span>}
         </div>
         {status?.present && (
           <p className="mt-2 line-clamp-2 rounded bg-neutral-900 p-2 font-mono text-[11px] leading-relaxed text-neutral-500">
@@ -116,7 +116,7 @@ export default function CvWidget({
             className="rounded-md bg-green-950/60 px-2 py-0.5 text-[11px] text-green-300"
             title={status.preview + '…'}
           >
-            ✓ CV on file ({(status.chars / 1000).toFixed(1)}k chars) — questions are grounded in it
+            CV on file ({(status.chars / 1000).toFixed(1)}k chars), questions are grounded in it
           </span>
           <button
             onClick={() => fileRef.current?.click()}
@@ -133,10 +133,10 @@ export default function CvWidget({
         <button
           onClick={() => fileRef.current?.click()}
           disabled={busy}
-          title="Upload your CV (PDF or .txt/.md) — the interviewer reads it and probes its actual content"
+          title="Upload your CV (PDF or .txt/.md), the interviewer reads it and probes its actual content"
           className="rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs text-neutral-300 hover:bg-neutral-800 disabled:opacity-40"
         >
-          {busy ? 'Uploading…' : '📄 Upload CV'}
+          {busy ? 'Uploading…' : 'Upload CV'}
         </button>
       )}
       {error && <span className="text-[11px] text-red-400">{error}</span>}

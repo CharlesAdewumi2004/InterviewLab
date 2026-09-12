@@ -241,7 +241,7 @@ export async function compileAndRun(
 
   let runtimeStderr = exec.stderr.trim();
   if (exec.timedOut) {
-    runtimeStderr = [runtimeStderr, `[execution timed out after ${Math.round(plan.exec.timeoutMs / 1000)}s — killed]`]
+    runtimeStderr = [runtimeStderr, `[execution timed out after ${Math.round(plan.exec.timeoutMs / 1000)}s, killed]`]
       .filter(Boolean)
       .join('\n');
   } else if (exec.code === null) {

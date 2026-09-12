@@ -26,7 +26,7 @@ export function Clock({ startedAt, pausedMs, pausedAt }: { startedAt: number; pa
   return (
     <span className={`font-mono text-xs ${pausedAt !== null ? 'text-amber-400' : 'text-neutral-500'}`}>
       {m}:{String(s).padStart(2, '0')}
-      {pausedAt !== null && ' ⏸'}
+      {pausedAt !== null && ' '}
     </span>
   );
 }
@@ -85,13 +85,13 @@ export function LanguagePicker({ value, onChange }: { value: Language; onChange:
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as Language)}
-        title="Language for this session — stubs, tests and grading all follow it"
+        title="Language for this session, stubs, tests and grading all follow it"
         className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-800"
       >
         {LANGUAGES.map((l) => (
           <option key={l.id} value={l.id}>
             {l.label}
-            {available(l.id) ? '' : ' — not installed'}
+            {available(l.id) ? '' : ', not installed'}
           </option>
         ))}
       </select>
@@ -144,7 +144,7 @@ export function VoicePicker() {
       {!hasNatural && (
         <span
           className="text-[11px] text-neutral-500"
-          title="Microsoft Edge exposes neural 'Natural' voices to this app — noticeably smoother than what this browser offers."
+          title="Microsoft Edge exposes neural 'Natural' voices to this app, noticeably smoother than what this browser offers."
         >
           smoother in Edge
         </span>

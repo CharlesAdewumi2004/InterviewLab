@@ -63,7 +63,7 @@ export default memo(function NavBar(props: Props) {
 
       <div className="flex-1" />
 
-      {/* Session controls are meaningless outside a round — the dashboard,
+      {/* Session controls are meaningless outside a round, the dashboard,
           progress and setup pages stay uncluttered. */}
       {props.inSession && (
         <>
@@ -77,8 +77,8 @@ export default memo(function NavBar(props: Props) {
             onClick={props.onPause}
             title={
               props.paused
-                ? 'Resume the session — the clock restarts and the narration mic comes back'
-                : 'Pause the session — the clock stops, the narration mic yields, and paused time never counts toward grading'
+                ? 'Resume the session, the clock restarts and the narration mic comes back'
+                : 'Pause the session, the clock stops, the narration mic yields, and paused time never counts toward grading'
             }
             className={
               props.paused
@@ -86,7 +86,7 @@ export default memo(function NavBar(props: Props) {
                 : 'rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs text-neutral-400 hover:bg-neutral-800'
             }
           >
-            {props.paused ? '▶ Resume' : '⏸ Pause'}
+            {props.paused ? 'Resume' : 'Pause'}
           </button>
 
           {speechInputSupported && (
@@ -95,7 +95,7 @@ export default memo(function NavBar(props: Props) {
               title={
                 props.narrationOn
                   ? props.narrationActive
-                    ? 'Narration mic is live — think-aloud is transcribed for the interviewer and grading. Never sends a chat message.'
+                    ? 'Narration mic is live, think-aloud is transcribed for the interviewer and grading. Never sends a chat message.'
                     : 'Narration on, momentarily paused (interviewer speaking or push-to-talk held).'
                   : 'Ambient narration: keep the mic open so your think-aloud counts as communication evidence (Axis D).'
               }
@@ -107,7 +107,7 @@ export default memo(function NavBar(props: Props) {
                   : 'rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs text-neutral-400 hover:bg-neutral-800'
               }
             >
-              {props.narrationOn ? (props.narrationActive ? '● Narrating' : '◌ Narration') : 'Narrate'}
+              {props.narrationOn ? (props.narrationActive ? 'Narrating' : 'Narration') : 'Narrate'}
             </button>
           )}
 
@@ -138,7 +138,7 @@ export default memo(function NavBar(props: Props) {
             title="Discard this session and start a fresh one (no grading; the file stays on disk)"
             className="rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs text-neutral-400 hover:bg-neutral-800 disabled:opacity-40"
           >
-            Reset
+           Reset
           </button>
         </>
       )}
@@ -152,7 +152,7 @@ export default memo(function NavBar(props: Props) {
             : 'rounded-md px-2.5 py-1 text-xs text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-300'
         }
       >
-        Setup
+       Setup
       </button>
     </div>
   );

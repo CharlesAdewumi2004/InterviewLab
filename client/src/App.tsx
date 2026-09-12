@@ -301,7 +301,7 @@ export default function App() {
   const handlePause = useCallback(() => {
     const next = !pausedRef.current;
     if (!send({ type: 'session:pause', paused: next })) {
-      setChatError('Not connected — cannot pause/resume right now.');
+      setChatError('Not connected, cannot pause/resume right now.');
       return;
     }
     setPauseState((p) =>
@@ -318,11 +318,11 @@ export default function App() {
   const handleRun = useCallback(() => {
     const state = editorApiRef.current?.getState();
     if (!state) {
-      setChatError('The editor is still loading — give it a second.');
+      setChatError('The editor is still loading, give it a second.');
       return;
     }
     if (!send({ type: 'run', buffer: state.buffer })) {
-      setChatError('Not connected — reconnecting. Try Run again in a moment.');
+      setChatError('Not connected, reconnecting. Try Run again in a moment.');
     }
   }, [send]);
 
@@ -333,13 +333,13 @@ export default function App() {
     (content: string): boolean => {
       const state = editorApiRef.current?.getState();
       if (!state) {
-        setChatError('The editor is still loading — give it a second.');
+        setChatError('The editor is still loading, give it a second.');
         return false;
       }
       if (chatBusyRef.current) return false; // double-send guard (Enter + PTT race)
       // Bundle the live editor state so the model never sees a stale buffer.
       if (!send({ type: 'chat:send', content, ...state, voice: voiceModeRef.current })) {
-        setChatError('Not connected — reconnecting. Your message was not sent.');
+        setChatError('Not connected, reconnecting. Your message was not sent.');
         return false;
       }
       setChatError(null);
@@ -382,7 +382,7 @@ export default function App() {
   const handleIntake = useCallback(
     (raw: string, delivery: 'text' | 'oral', framing: 'scenario' | 'plain') => {
       if (!send({ type: 'problem:intake', raw, delivery, framing, voice: voiceModeRef.current })) {
-        setIntakeError('Not connected — reconnecting. Try again in a moment.');
+        setIntakeError('Not connected, reconnecting. Try again in a moment.');
         return;
       }
       setIntakeLoading(true);
@@ -394,7 +394,7 @@ export default function App() {
   const handleTechStart = useCallback(
     (topics: TechTopic[]) => {
       if (!send({ type: 'techq:start', topics })) {
-        setChatError('Not connected — reconnecting. Try starting again in a moment.');
+        setChatError('Not connected, reconnecting. Try starting again in a moment.');
       }
     },
     [send],
@@ -403,7 +403,7 @@ export default function App() {
   const handleDebugPick = useCallback(
     (id?: string) => {
       if (!send({ type: 'debug:pick', id })) {
-        setChatError('Not connected — reconnecting. Try picking again in a moment.');
+        setChatError('Not connected, reconnecting. Try picking again in a moment.');
       }
     },
     [send],
@@ -412,7 +412,7 @@ export default function App() {
   const handleOopPick = useCallback(
     (id?: string) => {
       if (!send({ type: 'oop:pick', id })) {
-        setChatError('Not connected — reconnecting. Try picking again in a moment.');
+        setChatError('Not connected, reconnecting. Try picking again in a moment.');
       }
     },
     [send],
@@ -420,7 +420,7 @@ export default function App() {
 
   const handleEndSession = useCallback(() => {
     if (!send({ type: 'session:end' })) {
-      setChatError('Not connected — cannot end the session right now.');
+      setChatError('Not connected, cannot end the session right now.');
       return;
     }
     setEndingSession(true);
@@ -435,7 +435,7 @@ export default function App() {
       return;
     }
     if (!send({ type: 'session:reset' })) {
-      setChatError('Not connected — cannot reset the session right now.');
+      setChatError('Not connected, cannot reset the session right now.');
     }
     // The fresh session:ready that follows resets all client state.
   }, [send]);
@@ -474,7 +474,7 @@ export default function App() {
   const handleDesignPick = useCallback(
     (id?: string) => {
       if (!send({ type: 'design:pick', id })) {
-        setChatError('Not connected — reconnecting. Try picking again in a moment.');
+        setChatError('Not connected, reconnecting. Try picking again in a moment.');
       }
     },
     [send],
@@ -542,7 +542,7 @@ export default function App() {
           className="flex items-center justify-between gap-3 border-b border-amber-800/60 bg-amber-950/60 px-3 py-1.5 text-xs text-amber-200"
         >
           <span>
-            The server restarted and this session could not be resumed — your code was kept, but the clock and
+            The server restarted and this session could not be resumed, your code was kept, but the clock and
             transcript started over.
           </span>
           <button
@@ -554,8 +554,8 @@ export default function App() {
         </div>
       )}
 
-      {/* The workspace stays MOUNTED across navigation — Monaco's buffer and
-          the live session must survive page switches — pages only toggle
+      {/* The workspace stays MOUNTED across navigation, Monaco's buffer and
+          the live session must survive page switches, pages only toggle
           visibility. Design mode hides the console (whiteboard); behavioral
           hides editor+problem and centers the chat. */}
       <div className={`min-h-0 flex-1 flex-col ${inWorkspace ? 'flex' : 'hidden'}`}>
@@ -594,6 +594,7 @@ export default function App() {
             <div className="min-h-0 flex-[3]">
               <Editor
                 language={language}
+                hasProblem={problem !== null}
                 onState={handleEditorState}
                 onRun={handleRun}
                 onFocusChat={handleFocusChat}

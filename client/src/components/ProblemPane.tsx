@@ -54,7 +54,7 @@ function DesignBank({
             onClick={() => setChanging(true)}
             className="shrink-0 rounded bg-neutral-800 px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-700"
           >
-            Change
+           Change
           </button>
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -69,11 +69,11 @@ function DesignBank({
         </div>
         <p className="text-xs text-neutral-500">Asked at: {designQuestion.asks.join(', ')}</p>
         <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
-          🗣 The interviewer stated the prompt in chat — deliberately vague; requirements, numbers and scope are
+          The interviewer stated the prompt in chat, deliberately vague; requirements, numbers and scope are
           yours to extract. Use the editor as your whiteboard (APIs, data model, capacity math, ASCII diagrams).
         </p>
         <div className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-600">
-          Delivery framework (you drive it): requirements ~5m · entities ~2m · API ~5m · high-level design ~10-15m ·
+         Delivery framework (you drive it): requirements ~5m · entities ~2m · API ~5m · high-level design ~10-15m ·
           deep dives ~10m. A complete simple design beats a fancy incomplete one.
         </div>
       </div>
@@ -91,14 +91,14 @@ function DesignBank({
           }}
           className="rounded bg-blue-700 px-2.5 py-1 text-xs font-medium hover:bg-blue-600"
         >
-          🎲 Random
+          Random
         </button>
       </div>
       {bankError && (
         <div className="flex items-center justify-between gap-2 rounded bg-red-900/40 px-2 py-1 text-xs text-red-300">
           <span>{bankError}</span>
           <button onClick={retry} className="shrink-0 rounded bg-red-800/60 px-2 py-0.5 hover:bg-red-700/60">
-            Retry
+           Retry
           </button>
         </div>
       )}
@@ -208,7 +208,7 @@ export default memo(function ProblemPane({
       <div className="flex h-full flex-col gap-2 p-3">
         <h2 className="text-sm font-semibold text-neutral-300">New problem</h2>
         <p className="text-xs text-neutral-500">
-          Paste a rough problem — a LeetCode description, a note from a friend, anything. It gets re-dressed as a
+         Paste a rough problem, a LeetCode description, a note from a friend, anything. It gets re-dressed as a
           realistic interview scenario (same underlying algorithm, disguised identity) with a starting stub and
           hidden test cases.
         </p>
@@ -219,14 +219,14 @@ export default memo(function ProblemPane({
               title="Random pick from the questions that come up most in real screens (2026 frequency data + candidate reports)"
               className="rounded bg-neutral-800 px-2 py-1 text-xs text-orange-300 hover:bg-neutral-700"
             >
-              🎲 Most-asked
+              Most-asked
             </button>
             <button
               onClick={() => suggest('extended')}
               title="Random pick from the wider commonly drilled set"
               className="rounded bg-neutral-800 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
             >
-              🎲 Wider bank
+              Wider bank
             </button>
             {picked && (
               <span className="truncate text-[10px] text-neutral-500">
@@ -255,18 +255,18 @@ export default memo(function ProblemPane({
                 : 'flex-1 bg-neutral-900 px-2 py-1 text-neutral-400 hover:bg-neutral-800'
             }
           >
-            Written
+           Written
           </button>
           <button
             onClick={() => setDelivery('oral')}
-            title="Phone-screen style: the interviewer states the problem in chat/voice — nothing appears here. Listen, take notes, ask for repeats."
+            title="Phone-screen style: the interviewer states the problem in chat/voice, nothing appears here. Listen, take notes, ask for repeats."
             className={
               delivery === 'oral'
                 ? 'flex-1 bg-blue-700 px-2 py-1 font-medium text-white'
                 : 'flex-1 bg-neutral-900 px-2 py-1 text-neutral-400 hover:bg-neutral-800'
             }
           >
-            Oral only
+           Oral only
           </button>
         </div>
         <div className="flex overflow-hidden rounded border border-neutral-700 text-xs">
@@ -279,18 +279,18 @@ export default memo(function ProblemPane({
                 : 'flex-1 bg-neutral-900 px-2 py-1 text-neutral-400 hover:bg-neutral-800'
             }
           >
-            Scenario
+           Scenario
           </button>
           <button
             onClick={() => setFraming('plain')}
-            title="No invented context at all — the problem delivered straight, just phrased the way an interviewer would say it. Constraints still stay hidden until you ask."
+            title="No invented context at all, the problem delivered straight, just phrased the way an interviewer would say it. Constraints still stay hidden until you ask."
             className={
               framing === 'plain'
                 ? 'flex-1 bg-blue-700 px-2 py-1 font-medium text-white'
                 : 'flex-1 bg-neutral-900 px-2 py-1 text-neutral-400 hover:bg-neutral-800'
             }
           >
-            Plain
+           Plain
           </button>
         </div>
         <div className="flex gap-2">
@@ -306,7 +306,7 @@ export default memo(function ProblemPane({
               onClick={() => setShowIntake(false)}
               className="rounded bg-neutral-800 px-3 py-1.5 text-sm hover:bg-neutral-700"
             >
-              Back
+             Back
             </button>
           )}
         </div>
@@ -325,19 +325,19 @@ export default memo(function ProblemPane({
           onClick={() => setShowIntake(true)}
           className="shrink-0 rounded bg-neutral-800 px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-700"
         >
-          New problem
+         New problem
         </button>
       </div>
       {problem.oral ? (
         <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
-          🎧 The interviewer stated this problem in the chat — there's no written version. Ask them to repeat
+          The interviewer stated this problem in the chat, there's no written version. Ask them to repeat
           anything you missed (that's normal phone-screen behaviour), and keep your own notes.
         </p>
       ) : (
         <>
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-300">{problem.statement}</p>
           <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
-            That's all you get — like a real interview. Constraints, sizes, edge cases and examples exist, but the
+           That's all you get, like a real interview. Constraints, sizes, edge cases and examples exist, but the
             interviewer only reveals what you ask for.
           </p>
         </>

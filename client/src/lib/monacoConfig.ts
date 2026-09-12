@@ -631,22 +631,58 @@ export function setupMonaco(monaco: Monaco): void {
   });
 }
 
-// LeetCode-like editor: curated STL/keyword/member autocomplete (above) plus
-// identifiers already in the buffer — still no clangd-grade type analysis.
-// Static object — a stable reference matters: @monaco-editor/react calls
-// updateOptions when it changes.
+// Editor behaviour shared by every language. Two choices are deliberate and
+// worth keeping:
+//
+// acceptSuggestionOnEnter: 'off' — Enter always inserts a newline. With it on,
+// the suggest widget swallows the Enter you meant as a line break and pastes a
+// completion you never chose, which is the single most jarring thing a code
+// editor can do while you are mid-thought. Tab accepts instead.
+//
+// fixedOverflowWidgets: true — the editor lives in a narrow middle pane, and
+// without this the suggest and hover widgets are clipped by the pane's
+// boundary instead of floating above the layout.
+//
+// Static object: a stable reference matters, because @monaco-editor/react
+// calls updateOptions whenever it changes.
 export const EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   fontSize: 14,
-  tabSize: 4,
+  lineHeight: 21,
+  fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace",
   fontLigatures: false,
   minimap: { enabled: false },
   wordBasedSuggestions: 'currentDocument',
   quickSuggestions: { other: true, comments: false, strings: false },
+  quickSuggestionsDelay: 120,
   suggestOnTriggerCharacters: true,
-  autoClosingBrackets: 'always',
-  autoClosingQuotes: 'always',
+  acceptSuggestionOnEnter: 'off',
+  tabCompletion: 'on',
+  suggestSelection: 'first',
+  fixedOverflowWidgets: true,
+  autoClosingBrackets: 'languageDefined',
+  autoClosingQuotes: 'languageDefined',
+  autoIndent: 'full',
   bracketPairColorization: { enabled: true },
+  guides: { indentation: true, bracketPairs: 'active' },
+  renderLineHighlight: 'all',
+  renderWhitespace: 'selection',
+  cursorBlinking: 'smooth',
+  smoothScrolling: true,
   scrollBeyondLastLine: false,
+  scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10, useShadows: false },
   automaticLayout: true,
-  padding: { top: 8 },
+  padding: { top: 10, bottom: 10 },
 };
+
+// Indentation follows each language's own convention, because code that comes
+// out formatted the way the ecosystem formats it is code an interviewer reads
+// without friction (and Go's own tools reject spaces outright).
+const INDENT: Record<string, { tabSize: number; insertSpaces: boolean }> = {
+  javascript: { tabSize: 2, insertSpaces: true },
+  typescript: { tabSize: 2, insertSpaces: true },
+  go: { tabSize: 4, insertSpaces: false },
+};
+
+export function editorOptionsFor(monacoLanguage: string): editor.IStandaloneEditorConstructionOptions {
+  return { ...EDITOR_OPTIONS, ...(INDENT[monacoLanguage] ?? { tabSize: 4, insertSpaces: true }) };
+}

@@ -231,10 +231,10 @@ export default function ChatPane({
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-3">
         {turns.length === 0 && !streamText && (
           <p className="text-sm text-neutral-500">
-            Talk to the {personaChatLabel(persona)} — they can already see your code, build status and
+           Talk to the {personaChatLabel(persona)}, they can already see your code, build status and
             test results. No need to paste anything.
             {speechInputSupported &&
-              ' Hold Ctrl+Space (or F8) to speak — release to send. Or tap it to toggle the mic on hands-free; tap again to send.'}
+              ' Hold Ctrl+Space (or F8) to speak, release to send. Or tap it to toggle the mic on hands-free; tap again to send.'}
           </p>
         )}
         <TurnList turns={turns} />
@@ -257,8 +257,8 @@ export default function ChatPane({
       </div>
       <div className="border-t border-neutral-800 p-2">
         {narrationLive && (
-          <div className="mb-1 truncate text-xs italic text-neutral-500" title="Heard as think-aloud — not sent as a message">
-            <span className="animate-pulse">●</span> {narrationLive}
+          <div className="mb-1 truncate text-xs italic text-neutral-500" title="Heard as think-aloud, not sent as a message">
+            <span className="animate-pulse"></span> {narrationLive}
           </div>
         )}
         <div className="flex items-end gap-2">
@@ -277,13 +277,13 @@ export default function ChatPane({
             }}
             placeholder={
               listening === 'toggle'
-                ? 'Listening — tap Ctrl+Space / F8 again to send'
+                ? 'Listening, tap Ctrl+Space / F8 again to send'
                 : listening
                   ? 'Listening…'
                   : busy
                     ? 'Waiting for response…'
                     : speechInputSupported
-                      ? 'Ask a question — or tap/hold Ctrl+Space / F8 to speak'
+                      ? 'Ask a question, or tap/hold Ctrl+Space / F8 to speak'
                       : 'Ask a question (Enter to send, Shift+Enter for newline)'
             }
             rows={2}
@@ -305,7 +305,7 @@ export default function ChatPane({
                 listening ? 'animate-pulse bg-red-700 hover:bg-red-600' : 'bg-neutral-800 hover:bg-neutral-700'
               }`}
             >
-              {listening ? '■' : 'Mic'}
+              {listening ? '' : 'Mic'}
             </button>
           )}
         </div>

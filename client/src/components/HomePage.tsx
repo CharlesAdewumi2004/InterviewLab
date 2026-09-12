@@ -44,7 +44,7 @@ const ROUNDS: { route: Route; title: string; desc: string; accent: string }[] = 
   {
     route: 'behavioral',
     title: 'Behavioral',
-    desc: 'Hiring-manager STAR probing of your actual projects — ownership pinned, outcomes verified, reflection expected.',
+    desc: 'Hiring-manager STAR probing of your actual projects, ownership pinned, outcomes verified, reflection expected.',
     accent: 'text-green-400',
   },
 ];
@@ -99,10 +99,10 @@ export default function HomePage({ onNavigate }: Props) {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-4xl px-6 py-8">
         <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">
-          Practice interviews that behave like the real thing
+         Practice interviews that behave like the real thing
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-neutral-400">
-          Five kinds of round, an interviewer who watches your editor and refuses to rescue you, and an
+         Five kinds of round, an interviewer who watches your editor and refuses to rescue you, and an
           evidence-first scorecard at the end. Runs locally on your own Claude subscription.
         </p>
 
@@ -112,12 +112,12 @@ export default function HomePage({ onNavigate }: Props) {
             className="mt-5 flex w-full items-center justify-between gap-3 rounded-lg border border-amber-800/70 bg-amber-950/40 px-4 py-3 text-left hover:bg-amber-950/60"
           >
             <span>
-              <span className="text-sm font-medium text-amber-200">Finish setup — no Claude account linked yet</span>
+              <span className="text-sm font-medium text-amber-200">Finish setup, no Claude account linked yet</span>
               <span className="mt-0.5 block text-xs text-amber-200/70">
-                One command links your existing Claude subscription. Nothing else is billed or required.
+               One command links your existing Claude subscription. Nothing else is billed or required.
               </span>
             </span>
-            <span className="shrink-0 text-xs text-amber-300">Set up →</span>
+            <span className="shrink-0 text-xs text-amber-300">Set up</span>
           </button>
         )}
 
@@ -126,7 +126,7 @@ export default function HomePage({ onNavigate }: Props) {
             <StatCard label="Sessions graded" value={grades === null ? '…' : String(grades.length)} />
             <StatCard
               label="Latest"
-              value={derived ? derived.latest.weighted.toFixed(2) : '—'}
+              value={derived ? derived.latest.weighted.toFixed(2) : 'n/a'}
               sub={derived ? derived.latest.recommendation : 'no graded sessions yet'}
             />
             <StatCard
@@ -167,7 +167,7 @@ export default function HomePage({ onNavigate }: Props) {
             >
               <div className="text-base font-semibold text-neutral-100">{r.title}</div>
               <div className="mt-1 text-sm leading-relaxed text-neutral-500">{r.desc}</div>
-              <div className={`mt-3 text-xs font-medium ${r.accent}`}>Start →</div>
+              <div className={`mt-3 text-xs font-medium ${r.accent}`}>Start</div>
             </button>
           ))}
         </div>
@@ -189,7 +189,7 @@ export default function HomePage({ onNavigate }: Props) {
                         <td className="whitespace-nowrap px-3 py-2 text-neutral-500">
                           {new Date(g.gradedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                         </td>
-                        <td className="max-w-[220px] truncate px-3 py-2">{g.problemTitle ?? '—'}</td>
+                        <td className="max-w-[220px] truncate px-3 py-2">{g.problemTitle ?? 'n/a'}</td>
                         <td className="px-3 py-2 text-neutral-500">{MODE_LABELS[g.mode] ?? g.mode}</td>
                         <td className="px-3 py-2 text-right font-medium text-neutral-100">{g.weighted.toFixed(2)}</td>
                         <td className="px-3 py-2">{g.recommendation}</td>
@@ -199,7 +199,7 @@ export default function HomePage({ onNavigate }: Props) {
               </table>
             </div>
             <button onClick={() => onNavigate('progress')} className="mt-2 text-xs text-blue-400 hover:text-blue-300">
-              Full progress, trendlines and daily recap →
+             Full progress, trendlines and daily recap
             </button>
           </>
         )}

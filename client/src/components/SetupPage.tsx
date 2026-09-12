@@ -110,19 +110,19 @@ export default function SetupPage({ onCvUpdated }: Props) {
       <div className="mx-auto max-w-3xl px-6 py-8">
         <h1 className="text-xl font-semibold tracking-tight text-neutral-100">Setup</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Two things make this work: a linked Claude account for the interviewer, and a toolchain for whichever
+         Two things make this work: a linked Claude account for the interviewer, and a toolchain for whichever
           language you practise in. Everything here stays on this machine.
         </p>
 
         {statusError && (
           <p className="mt-4 rounded-md border border-red-900 bg-red-950/50 px-3 py-2 text-sm text-red-300">
-            Could not reach the server ({statusError}). Is it still running?
+           Could not reach the server ({statusError}). Is it still running?
           </p>
         )}
 
         <Section
           title="1 · Claude account"
-          subtitle="Interviewer, problem generation and grading all run on your own Claude subscription — no API key, no per-token billing."
+          subtitle="Interviewer, problem generation and grading all run on your own Claude subscription, no API key, no per-token billing."
         >
           <div className="flex items-center gap-2 text-sm">
             <Dot ok={status?.model.linked === true} warn={status?.model.linked === false} />
@@ -133,24 +133,24 @@ export default function SetupPage({ onCvUpdated }: Props) {
                   ? status.model.via === 'token'
                     ? 'Linked with a subscription token (CLAUDE_CODE_OAUTH_TOKEN).'
                     : 'Linked through the Claude Code login on this machine.'
-                  : 'Not linked yet — model calls will fail until you do one of the two below.'}
+                  : 'Not linked yet, model calls will fail until you do one of the two below.'}
             </span>
           </div>
 
           {status !== null && !status.model.linked && (
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="rounded-md border border-neutral-800 bg-neutral-950/60 p-3">
-                <div className="text-xs font-medium text-neutral-300">Option A — log in once (simplest)</div>
+                <div className="text-xs font-medium text-neutral-300">Option A, log in once (simplest)</div>
                 <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                  Install Claude Code, run it, and sign in with your Claude account. This app then reuses that login.
+                 Install Claude Code, run it, and sign in with your Claude account. This app then reuses that login.
                 </p>
                 <Copyable command="npm install -g @anthropic-ai/claude-code && claude" />
                 <p className="mt-1 text-[11px] text-neutral-600">Then type /login inside Claude Code.</p>
               </div>
               <div className="rounded-md border border-neutral-800 bg-neutral-950/60 p-3">
-                <div className="text-xs font-medium text-neutral-300">Option B — a token (headless / Docker)</div>
+                <div className="text-xs font-medium text-neutral-300">Option B, a token (headless / Docker)</div>
                 <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                  Mint a long-lived subscription token and put it in <code className="text-neutral-400">.env</code> as{' '}
+                 Mint a long-lived subscription token and put it in <code className="text-neutral-400">.env</code> as{' '}
                   <code className="text-neutral-400">CLAUDE_CODE_OAUTH_TOKEN=…</code>, then restart the server.
                 </p>
                 <Copyable command="claude setup-token" />
@@ -166,7 +166,7 @@ export default function SetupPage({ onCvUpdated }: Props) {
             >
               {probe.state === 'running' ? 'Testing…' : 'Test connection'}
             </button>
-            {probe.state === 'ok' && <span className="text-xs text-green-400">Model replied — you are good to go.</span>}
+            {probe.state === 'ok' && <span className="text-xs text-green-400">Model replied, you are good to go.</span>}
             {probe.state === 'fail' && (
               <span className="max-w-[28rem] text-xs text-red-400">Failed: {probe.detail}</span>
             )}
@@ -262,7 +262,7 @@ export default function SetupPage({ onCvUpdated }: Props) {
               </label>
               <label className="block sm:col-span-2">
                 <span className="text-xs text-neutral-400">
-                  Anything the interviewer should know (weak spots, domain, projects to probe)
+                 Anything the interviewer should know (weak spots, domain, projects to probe)
                 </span>
                 <textarea
                   className={`mt-1 h-24 resize-y ${inputClass}`}
@@ -281,14 +281,14 @@ export default function SetupPage({ onCvUpdated }: Props) {
           <div className="mt-5 border-t border-neutral-800 pt-4">
             <div className="text-xs font-medium text-neutral-300">Your CV</div>
             <p className="mb-2 mt-0.5 text-xs text-neutral-500">
-              Behavioral and full-mock rounds read it, then cross-examine what is actually on it — dates, ownership,
+             Behavioral and full-mock rounds read it, then cross-examine what is actually on it, dates, ownership,
               metrics. Stored locally in your sessions folder, never uploaded anywhere.
             </p>
             <CvWidget variant="panel" onCvUpdated={onCvUpdated} />
           </div>
         </Section>
 
-        <Section title="Extras" subtitle="Nice to have — nothing here blocks a session.">
+        <Section title="Extras" subtitle="Nice to have, nothing here blocks a session.">
           <ul className="space-y-2.5 text-sm">
             <li className="flex items-start gap-3">
               <span className="pt-1.5">
@@ -298,7 +298,7 @@ export default function SetupPage({ onCvUpdated }: Props) {
                 <div className="text-neutral-200">Semantic C++ autocomplete (clangd)</div>
                 <p className="text-xs text-neutral-500">
                   {status?.clangd.available
-                    ? 'Installed — C++ completions know real types.'
+                    ? 'Installed, C++ completions know real types.'
                     : 'Not installed. C++ still compiles and runs; completions fall back to a curated list. Install clangd to enable it.'}
                 </p>
               </div>
@@ -310,9 +310,9 @@ export default function SetupPage({ onCvUpdated }: Props) {
               <div>
                 <div className="text-neutral-200">Local storage</div>
                 <p className="break-all text-xs text-neutral-500">
-                  Sessions, grades and your profile live in{' '}
+                 Sessions, grades and your profile live in{' '}
                   <code className="text-neutral-400">{status?.storage.sessionsDir ?? '…'}</code>
-                  {status?.storage.writable === false && ' — and it is not writable right now.'}
+                  {status?.storage.writable === false && ', and it is not writable right now.'}
                 </p>
               </div>
             </li>

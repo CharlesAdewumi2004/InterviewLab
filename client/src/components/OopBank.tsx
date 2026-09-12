@@ -31,7 +31,7 @@ export default memo(function OopBank({ oopQuestion, onOopPick, sessionEpoch }: P
             onClick={() => setChanging(true)}
             className="shrink-0 rounded bg-neutral-800 px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-700"
           >
-            Change
+           Change
           </button>
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -46,13 +46,13 @@ export default memo(function OopBank({ oopQuestion, onOopPick, sessionEpoch }: P
         </div>
         <p className="text-xs text-neutral-500">{oopQuestion.asks}</p>
         <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
-          🗣 The interviewer stated the prompt in chat. The spec is incomplete on purpose — ask. Questions about what
+          The interviewer stated the prompt in chat. The spec is incomplete on purpose, ask. Questions about what
           the software must do get answered straight; what the classes and methods are is yours to decide.
         </p>
         <div className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-600">
-          Talk first (you drive it): scope → core classes with one-line responsibilities → key interfaces → where
-          behaviour varies (patterns earn their keep here). Then implement the skeleton in the editor — classes,
-          signatures, ownership; bodies only where trivial. ▶ Run compiles it.
+         Talk first (you drive it): scope, then core classes with one-line responsibilities, then key interfaces, then where
+          behaviour varies (patterns earn their keep here). Then implement the skeleton in the editor, classes,
+          signatures, ownership; bodies only where trivial.  Run compiles it.
         </div>
       </div>
     );
@@ -69,14 +69,14 @@ export default memo(function OopBank({ oopQuestion, onOopPick, sessionEpoch }: P
           }}
           className="rounded bg-blue-700 px-2.5 py-1 text-xs font-medium hover:bg-blue-600"
         >
-          🎲 Random
+          Random
         </button>
       </div>
       {bankError && (
         <div className="flex items-center justify-between gap-2 rounded bg-red-900/40 px-2 py-1 text-xs text-red-300">
           <span>{bankError}</span>
           <button onClick={retry} className="shrink-0 rounded bg-red-800/60 px-2 py-0.5 hover:bg-red-700/60">
-            Retry
+           Retry
           </button>
         </div>
       )}

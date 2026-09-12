@@ -24,7 +24,7 @@ function RunButton({ compiling, onRun }: { compiling: boolean; onRun: () => void
       className="rounded-md bg-green-700 px-3 py-1 text-xs font-medium text-white hover:bg-green-600 disabled:opacity-40"
       title="Build and run against the tests (Ctrl/Cmd+Enter)"
     >
-      {compiling ? 'Running…' : '▶ Run'}
+      {compiling ? 'Running…' : 'Run'}
     </button>
   );
 }
@@ -48,13 +48,13 @@ export default memo(function WorkspaceBar(props: Props) {
     return (
       <Bar
         title="System design round"
-        hint="the editor is your whiteboard — APIs, data model, capacity math, ASCII boxes"
+        hint="the editor is your whiteboard, APIs, data model, capacity math, ASCII boxes"
       />
     );
   }
   if (props.route === 'behavioral') {
     return (
-      <Bar title="Behavioral round" hint="STAR stories, ownership, reflection — the follow-ups are the interview">
+      <Bar title="Behavioral round" hint="STAR stories, ownership, reflection, the follow-ups are the interview">
         <CvWidget onCvUpdated={props.onCvUpdated} />
       </Bar>
     );
@@ -63,7 +63,7 @@ export default memo(function WorkspaceBar(props: Props) {
     return (
       <Bar
         title="OOP design round"
-        hint="talk first — scope, classes, interfaces, patterns — then implement the skeleton"
+        hint="talk first, scope, classes, interfaces, patterns, then implement the skeleton"
       >
         <LanguagePicker value={props.language} onChange={props.onLanguage} />
         <RunButton compiling={props.compiling} onRun={props.onRun} />
@@ -74,7 +74,7 @@ export default memo(function WorkspaceBar(props: Props) {
     return (
       <Bar
         title="Tech knowledge round"
-        hint="verbal fundamentals with drill-down follow-ups — the editor comes in for debug exercises"
+        hint="verbal fundamentals with drill-down follow-ups, the editor comes in for debug exercises"
       >
         <LanguagePicker value={props.language} onChange={props.onLanguage} />
         <RunButton compiling={props.compiling} onRun={props.onRun} />
@@ -96,8 +96,8 @@ export default memo(function WorkspaceBar(props: Props) {
         {props.persona === 'interviewer'
           ? 'a real coding round: terse, hidden constraints, no rescue'
           : props.persona === 'mock'
-            ? 'the whole loop — say "full interview" or "question practice" in chat to start'
-            : 'straight answers and explanations — nothing is graded against you here'}
+            ? 'the whole loop, say "full interview" or "question practice" in chat to start'
+            : 'straight answers and explanations, nothing is graded against you here'}
       </span>
       <div className="flex-1" />
       <LanguagePicker value={props.language} onChange={props.onLanguage} />

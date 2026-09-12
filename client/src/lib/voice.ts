@@ -99,7 +99,7 @@ export function startMic(opts: {
       if (ev.error !== 'no-speech' && ev.error !== 'aborted') {
         opts.onError?.(
           ev.error === 'not-allowed'
-            ? 'Microphone access was denied — allow it in the browser address bar.'
+            ? 'Microphone access was denied, allow it in the browser address bar.'
             : `Speech input error: ${ev.error}`,
         );
       }
@@ -263,7 +263,7 @@ export class NarrationCapture {
     rec.interimResults = true;
 
     rec.onresult = (ev) => {
-      this.restartDelay = 400; // audio is flowing — reset any error backoff
+      this.restartDelay = 400; // audio is flowing, reset any error backoff
       let interim = '';
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const r = ev.results[i];
@@ -279,7 +279,7 @@ export class NarrationCapture {
     rec.onerror = (ev) => {
       if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
         this.stop();
-        this.opts.onError?.('Microphone access was denied — allow it in the browser address bar.');
+        this.opts.onError?.('Microphone access was denied, allow it in the browser address bar.');
       } else if (ev.error === 'network') {
         this.restartDelay = Math.min(this.restartDelay * 2, 5000); // don't hammer a broken service
       }
@@ -346,7 +346,7 @@ export function setPreferredVoice(name: string | null): void {
 export function speakSample(): void {
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(
-    'Hi — this is how your interviewer will sound. Ready when you are.',
+    'Hi, this is how your interviewer will sound. Ready when you are.',
   );
   const voice = pickVoice();
   if (voice) u.voice = voice;
@@ -357,7 +357,7 @@ export function speakSample(): void {
 function pickVoice(): SpeechSynthesisVoice | null {
   if (cachedVoice !== undefined) return cachedVoice;
   const en = listEnglishVoices();
-  if (en.length === 0) return null; // not loaded yet — retry next utterance
+  if (en.length === 0) return null; // not loaded yet, retry next utterance
   const preferred = getPreferredVoiceName();
   cachedVoice = (preferred && en.find((v) => v.name === preferred)) || en[0];
   return cachedVoice;
@@ -427,7 +427,7 @@ export class SentenceSpeaker {
     for (;;) {
       const fence = this.buffer.indexOf('```');
       if (this.inCode) {
-        if (fence === -1) return; // code still streaming — speak nothing
+        if (fence === -1) return; // code still streaming, speak nothing
         this.buffer = this.buffer.slice(fence + 3);
         this.inCode = false;
         continue;

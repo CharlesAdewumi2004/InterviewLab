@@ -72,6 +72,12 @@ export function buildSystemPrompt(session: Session): string {
     if (profile) blocks.push(profile);
   }
 
+  // House style for every reply, in one place: the transcript reads like a
+  // person typing in a chat window, not a model formatting a document.
+  blocks.push(
+    'STYLE: write plain text. No emoji, ever. No em dashes or en dashes anywhere: use a comma, a colon, or a second sentence instead. Keep formatting minimal; code goes in fenced blocks, everything else is prose.',
+  );
+
   const meta = languageMeta(session.language);
   blocks.push(
     `SESSION LANGUAGE: the candidate is working in ${meta.label}. Judge idiomatic ${meta.label} — its standard library, its conventions, the abstractions a strong ${meta.label} engineer reaches for — at the same bar, and map any language-specific calibration in your instructions onto its ${meta.label} equivalent. Never suggest they switch languages.`,

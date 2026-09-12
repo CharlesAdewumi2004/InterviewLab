@@ -364,7 +364,7 @@ export const SHELL = BASH;
 export function missingToolchainMessage(language: Language): string {
   const meta = languageMeta(language);
   return [
-    `${meta.label} is not set up on this machine — the runner needs ${meta.toolchain}.`,
+    `${meta.label} is not set up on this machine. The runner needs ${meta.toolchain}.`,
     `Install it: ${meta.install}`,
     'Then restart the server. Other languages keep working in the meantime.',
   ].join('\n');

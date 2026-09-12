@@ -32,28 +32,15 @@ const PORT = Number(process.env.PORT || 3001);
 const HOST = process.env.HOST || '127.0.0.1';
 
 // Model calls run through the Claude Agent SDK on the user's own Claude
-// subscription — no API key involved. See claude.ts. Two ways to link an
-// account, checked here so a fresh setup gets clear instructions at boot.
-if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-  console.log('Model access: Claude subscription via CLAUDE_CODE_OAUTH_TOKEN.');
-} else if (fs.existsSync(path.join(os.homedir(), '.claude'))) {
-  console.log('Model access: Claude Code login found on this machine (run `claude` then `/login` if calls fail with auth errors).');
-} else {
-  console.warn(
-    [
-      '',
-      '⚠ No Claude account linked yet — model calls will fail until you do ONE of:',
-      '  1. Run `claude` then `/login` on this machine (Claude Pro/Max subscription), or',
-      '  2. Run `claude setup-token` (on any machine — or `docker compose run --rm auth`),',
-      '     then put the token in .env as CLAUDE_CODE_OAUTH_TOKEN=...',
-      'Your account, your usage — nothing is stored in this repository.',
-      '',
-    ].join('\n'),
-  );
+// subscription — no API key involved (see claude.ts). Credentials come from
+// either a Claude Code login on this machine or a subscription token, so a
+// fresh install gets told which it found, or how to link one.
+function modelAccessNote(): string {
+  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) return 'Claude subscription linked via CLAUDE_CODE_OAUTH_TOKEN.';
+  if (fs.existsSync(path.join(os.homedir(), '.claude'))) return 'Claude subscription linked via the Claude Code login on this machine.';
+  return '';
 }
 
-// The sessions directory holds transcripts, the gradebook and the profile —
-// an unwritable one fails late and confusingly, so the doctor checks it.
 function sessionsWritable(): boolean {
   try {
     fs.mkdirSync(SESSIONS_DIR, { recursive: true });
@@ -207,7 +194,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
       // failure: recording it — or keeping the runtime — would poison the
       // session transcript with an empty assistant block, and the API then
       // rejects every later turn with "text content blocks must be non-empty".
-      if (!text.trim()) throw new Error('The model returned an empty reply — send that again.');
+      if (!text.trim()) throw new Error('The model returned an empty reply. Send that again.');
 
       const turn: Turn = { role: 'assistant', content: text, at: Date.now(), persona: st.session.persona };
       st.addTurn(turn);
@@ -300,7 +287,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         narration: st.takePendingNarration(),
       });
       const { text, usage } = await chat.send(turnText, (t) => send({ type: 'chat:delta', text: t }));
-      if (!text.trim()) throw new Error('The interviewer failed to state the problem — say "please give me the problem".');
+      if (!text.trim()) throw new Error('The interviewer failed to state the problem. Say "please give me the problem".');
       const turn: Turn = { role: 'assistant', content: text, at: Date.now(), persona: st.session.persona };
       st.addTurn(turn);
       st.recordUsage(usage);
@@ -514,7 +501,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         // even when the subscription's rate window is exhausted. The fresh
         // runtime replays this turn from history on the first real message.
         if (chatBusy) {
-          send({ type: 'chat:error', message: 'Still responding — pick a design question after this reply.' });
+          send({ type: 'chat:error', message: 'Still responding. Pick a design question after this reply.' });
           break;
         }
         const q = (msg.id ? getDesignQuestion(msg.id) : undefined) ?? randomDesignQuestion();
@@ -531,7 +518,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         // Same model-free pattern as design:pick: the bank supplies the first
         // question verbatim; the private set rides the rebuilt system prompt.
         if (chatBusy) {
-          send({ type: 'chat:error', message: 'Still responding — start the round after this reply.' });
+          send({ type: 'chat:error', message: 'Still responding. Start the round after this reply.' });
           break;
         }
         const topics = msg.topics.length ? msg.topics : (['cpp', 'concurrency'] as TechTopic[]);
@@ -545,18 +532,18 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         resetChat(); // system prompt now carries the sampled question set
         send({ type: 'techq:ready', topics });
         cannedTurn(
-          `Alright — fundamentals round: ${topics.map((t) => TECH_TOPIC_LABELS[t].toLowerCase()).join(', ')}. No trick questions, just tell me how things actually work. ${qs[0].question}`,
+          `Alright, fundamentals round: ${topics.map((t) => TECH_TOPIC_LABELS[t].toLowerCase()).join(', ')}. No trick questions, just tell me how things actually work. ${qs[0].question}`,
         );
         break;
       }
       case 'debug:pick': {
         if (chatBusy) {
-          send({ type: 'chat:error', message: 'Still responding — pick an exercise after this reply.' });
+          send({ type: 'chat:error', message: 'Still responding. Pick an exercise after this reply.' });
           break;
         }
         const ex = (msg.id ? getDebugExercise(msg.id) : undefined) ?? randomDebugExercise(store.session.language);
         if (!ex) {
-          send({ type: 'problem:error', message: `No debug exercises for ${store.session.language} yet — switch language or pick a topic drill.` });
+          send({ type: 'problem:error', message: `No debug exercises for ${store.session.language} yet. Switch language or pick a topic drill.` });
           break;
         }
         // Runs through the standard problem machinery: flawed code becomes the
@@ -568,12 +555,12 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         store.save();
         resetChat();
         send({ type: 'problem:ready', problem: toClientProblem(problem), buffer: problem.signature });
-        cannedTurn(`${ex.scenario} The code's in your editor — have a read and tell me what you see.`);
+        cannedTurn(`${ex.scenario} The code's in your editor. Have a read and tell me what you see.`);
         break;
       }
       case 'oop:pick': {
         if (chatBusy) {
-          send({ type: 'chat:error', message: 'Still responding — pick a question after this reply.' });
+          send({ type: 'chat:error', message: 'Still responding. Pick a question after this reply.' });
           break;
         }
         const q = (msg.id ? getOopQuestion(msg.id) : undefined) ?? randomOopQuestion();
@@ -677,7 +664,7 @@ fastify.get('/api/setup', async () => {
     // Semantic C++ completion is a bonus, never a requirement.
     clangd: { available: CLANGD !== null, path: CLANGD },
     storage: { sessionsDir: SESSIONS_DIR, writable: sessionsWritable() },
-    voice: { note: 'Speech input and playback are browser features — Chrome and Edge support both.' },
+    voice: { note: 'Speech input and playback are browser features. Chrome and Edge support both.' },
   };
 });
 
@@ -712,7 +699,7 @@ fastify.put('/api/cv', { bodyLimit: 10 * 1024 * 1024 }, async (request, reply) =
     }
     if (!text.trim()) {
       reply.code(400);
-      return { error: 'No readable text found — export the CV as a PDF with selectable text, or upload it as .txt/.md.' };
+      return { error: 'No readable text found. Export the CV as a PDF with selectable text, or upload it as .txt/.md.' };
     }
     setCv(text);
     return { ok: true, status: cvStatus() };
@@ -757,7 +744,21 @@ fastify.post('/api/recap', async (request, reply) => {
 await fastify.listen({ port: PORT, host: HOST });
 const wss = new WebSocketServer({ server: fastify.server, path: '/ws' });
 wss.on('connection', handleConnection);
-console.log(`practice-ide server listening on http://${HOST}:${PORT} (ws at /ws)`);
+
+const url = `http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`;
+const access = modelAccessNote();
+const ready = (await toolchainReport()).filter((l) => l.available).map((l) => l.label);
+console.log(
+  [
+    '',
+    `  Interview Lab is running at ${url}`,
+    '',
+    `  Model access  ${access || 'NOT LINKED. Open the Setup page, or run: claude setup-token'}`,
+    `  Languages     ${ready.length ? ready.join(', ') : 'none detected. Install a toolchain, then see the Setup page'}`,
+    `  Setup check   ${url}/#/setup`,
+    '',
+  ].join('\n'),
+);
 
 // tsx watch restarts on every code change, and a dev machine sends SIGINT on
 // Ctrl-C: flush live sessions to disk so the reconnect resumes instead of

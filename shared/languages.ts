@@ -49,7 +49,7 @@ print("hello")
     monaco: 'javascript',
     ext: '.js',
     toolchain: 'Node.js 20+',
-    install: 'Already installed — this app runs on Node.',
+    install: 'Already installed: this app runs on Node.',
     defaultBuffer: `// CommonJS: the harness requires this file, so exported names are what it calls.
 // ${HINT_TEXT}
 
@@ -63,7 +63,7 @@ console.log('hello');
     monaco: 'typescript',
     ext: '.ts',
     toolchain: 'Node.js 20+ (TypeScript runs through the bundled tsx)',
-    install: 'Already installed — this app runs on Node.',
+    install: 'Already installed: this app runs on Node.',
     defaultBuffer: `// Types are stripped at run time (tsx), so type errors do not stop execution.
 // ${HINT_TEXT}
 
@@ -78,7 +78,7 @@ console.log('hello');
     ext: '.java',
     toolchain: 'JDK 17+ (javac and java)',
     install: 'Debian/Ubuntu: sudo apt install default-jdk · macOS: brew install openjdk · Windows: Temurin (adoptium.net)',
-    defaultBuffer: `// Your code lives in Solution.java — the test harness calls into it.
+    defaultBuffer: `// Your code lives in Solution.java. The test harness calls into it.
 // ${HINT_TEXT}
 
 class Solution {
@@ -114,7 +114,7 @@ int main() {
     ext: '.go',
     toolchain: 'Go 1.21+',
     install: 'Debian/Ubuntu: sudo apt install golang · macOS: brew install go · Windows: go.dev/dl',
-    defaultBuffer: `// package main, alongside the harness — exported or not, the harness calls it directly.
+    defaultBuffer: `// package main, alongside the harness, so it calls your functions directly.
 // ${HINT_TEXT}
 
 package main

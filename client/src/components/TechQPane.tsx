@@ -51,13 +51,13 @@ export default memo(function TechQPane({ techTopics, problem, onTechStart, onDeb
             onClick={() => setChanging(true)}
             className="shrink-0 rounded bg-neutral-800 px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-700"
           >
-            Change
+           Change
           </button>
         </div>
         <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-300">{problem.statement}</p>
         <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
-          🔍 The code in your editor has real problems — read it and tell the interviewer what you see before you
-          touch anything. Then fix and optimize: ▶ Run checks correctness AND a large timed case, so a slow fix
+          The code in your editor has real problems, read it and tell the interviewer what you see before you
+          touch anything. Then fix and optimize:  Run checks correctness AND a large timed case, so a slow fix
           still fails. The interviewer will never tell you how many issues there are.
         </p>
       </div>
@@ -72,12 +72,12 @@ export default memo(function TechQPane({ techTopics, problem, onTechStart, onDeb
       <div>
         <h2 className="text-sm font-semibold text-neutral-300">Knowledge drill</h2>
         <p className="mt-1 text-xs text-neutral-500">
-          Pick topics; the interviewer runs a question set with follow-up drills. Answers are graded against a
+         Pick topics; the interviewer runs a question set with follow-up drills. Answers are graded against a
           private key at the debrief.
         </p>
         {techTopics && !changing && (
           <p className="mt-1 rounded bg-neutral-900 px-2 py-1 text-[11px] text-neutral-500">
-            Round in progress: {techTopics.map((t) => TOPIC_LABELS[t]).join(' · ')} — starting again resamples the
+           Round in progress: {techTopics.map((t) => TOPIC_LABELS[t]).join(' · ')}, starting again resamples the
             questions.
           </p>
         )}
@@ -106,7 +106,7 @@ export default memo(function TechQPane({ techTopics, problem, onTechStart, onDeb
           disabled={!selected.length}
           className="mt-2 rounded bg-blue-700 px-3 py-1.5 text-sm font-medium hover:bg-blue-600 disabled:opacity-40"
         >
-          ▶ Start round
+          Start round
         </button>
       </div>
 
@@ -120,11 +120,11 @@ export default memo(function TechQPane({ techTopics, problem, onTechStart, onDeb
             }}
             className="rounded bg-neutral-800 px-2.5 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
           >
-            🎲 Random
+            Random
           </button>
         </div>
         <p className="mt-1 text-xs text-neutral-500">
-          Flawed code lands in your editor — find the issues by reading, then fix and optimize until the timed
+         Flawed code lands in your editor, find the issues by reading, then fix and optimize until the timed
           tests pass.
         </p>
         {!exercises && <p className="mt-2 text-xs text-neutral-600">Loading exercises…</p>}

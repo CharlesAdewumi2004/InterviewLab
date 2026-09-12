@@ -37,7 +37,7 @@ function Delta({ value, upIsGood = true }: { value: number; upIsGood?: boolean }
   // Sign glyph + color — direction never rides on color alone.
   return (
     <span style={{ color: good ? DELTA_UP : DELTA_DOWN }}>
-      {up ? '▲' : '▼'} {up ? '+' : ''}
+      {up ? '' : ''} {up ? '+' : ''}
       {Math.round(value * 100) / 100}
     </span>
   );
@@ -252,7 +252,7 @@ export default function ProgressView({ onClose, asPage }: Props) {
     const byKey = new Map<string, { label: string; points: number[] }>();
     for (const g of filtered) {
       for (const a of g.axes) {
-        const entry = byKey.get(a.axis) ?? { label: `${a.axis} — ${a.name}`, points: [] };
+        const entry = byKey.get(a.axis) ?? { label: `${a.axis}, ${a.name}`, points: [] };
         entry.points.push(a.score);
         byKey.set(a.axis, entry);
       }
@@ -350,7 +350,7 @@ export default function ProgressView({ onClose, asPage }: Props) {
             </button>
             {onClose && (
               <button onClick={onClose} className="rounded bg-neutral-800 px-3 py-1 text-sm hover:bg-neutral-700">
-                Close
+               Close
               </button>
             )}
           </div>
@@ -363,7 +363,7 @@ export default function ProgressView({ onClose, asPage }: Props) {
           <section className="mb-5 rounded border border-blue-900 bg-blue-950/20 p-4">
             <div className="mb-2 flex items-baseline justify-between">
               <h3 className="text-sm font-semibold text-blue-200">
-                Daily recap — {recap.date} · {recap.sessions} session{recap.sessions === 1 ? '' : 's'}
+               Daily recap, {recap.date} · {recap.sessions} session{recap.sessions === 1 ? '' : 's'}
               </h3>
               <button onClick={() => setRecap(null)} className="text-xs text-neutral-500 hover:text-neutral-300">
                 dismiss
@@ -419,20 +419,20 @@ export default function ProgressView({ onClose, asPage }: Props) {
           <div className="mb-3 flex items-center justify-between gap-3 rounded bg-red-900/40 px-3 py-2 text-sm text-red-300">
             <span>{error}</span>
             <button onClick={retry} className="shrink-0 rounded bg-red-800/60 px-2 py-1 text-xs hover:bg-red-700/60">
-              Retry
+             Retry
             </button>
           </div>
         )}
         {!error && grades === null && <p className="text-sm text-neutral-500">Loading…</p>}
         {grades !== null && grades.length === 0 && (
           <p className="text-sm text-neutral-500">
-            No graded sessions yet. Practise, then hit <span className="text-neutral-300">End session</span> — the
+           No graded sessions yet. Practise, then hit <span className="text-neutral-300">End session</span>, the
             scorecard records a grade here automatically.
           </p>
         )}
         {grades !== null && grades.length > 0 && filtered !== null && filtered.length === 0 && (
           <p className="text-sm text-neutral-500">
-            No graded sessions in this window — {grades.length} in total. Widen the range above.
+           No graded sessions in this window, {grades.length} in total. Widen the range above.
           </p>
         )}
 
@@ -452,36 +452,36 @@ export default function ProgressView({ onClose, asPage }: Props) {
               <StatTile
                 label="Readiness (3 full sims at Hire+)"
                 value={`${Math.min(derived.streak, 3)}/3`}
-                sub={derived.streak >= 3 ? 'bar met — book it' : 'consecutive, no red flags, D ≥ 3, narrated'}
+                sub={derived.streak >= 3 ? 'bar met, book it' : 'consecutive, no red flags, D ≥ 3, narrated'}
               />
               <StatTile
                 label="Drill trigger (§7)"
                 value={derived.drill ? `Axis ${derived.drill.axis}` : 'none'}
                 sub={
                   derived.drill
-                    ? `avg ${derived.drill.avg}/4 over last 3 — drill it`
+                    ? `avg ${derived.drill.avg}/4 over last 3, drill it`
                     : 'no axis averaging < 3 over last 3'
                 }
               />
               <StatTile
                 label="Hint dependency"
-                value={derived.hintLatest !== null ? `L${derived.hintLatest}` : '—'}
+                value={derived.hintLatest !== null ? `L${derived.hintLatest}` : 'n/a'}
                 sub={
                   derived.hintLatest !== null && derived.hintPrev !== null ? (
                     <Delta value={derived.hintLatest - derived.hintPrev} upIsGood={false} />
                   ) : (
-                    'avg hint level · target → 0-1'
+                    'avg hint level, target 0 to 1'
                   )
                 }
               />
               <StatTile
                 label="Clarification hit rate"
-                value={derived.clarLatest !== null ? `${derived.clarLatest}/8` : '—'}
+                value={derived.clarLatest !== null ? `${derived.clarLatest}/8` : 'n/a'}
                 sub="unprompted · target ≥ 6/8"
               />
               <StatTile
                 label="Pace (avg over window)"
-                value={derived.avgDuration !== null ? `${derived.avgDuration}m` : '—'}
+                value={derived.avgDuration !== null ? `${derived.avgDuration}m` : 'n/a'}
                 sub={
                   derived.avgGreen !== null
                     ? `tests green at ${derived.avgGreen}m (${derived.greenCount} session${derived.greenCount === 1 ? '' : 's'})`
@@ -491,12 +491,12 @@ export default function ProgressView({ onClose, asPage }: Props) {
             </div>
 
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              Weighted score over sessions
+             Weighted score over sessions
             </h3>
             <TrendLine grades={filtered} />
 
             <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              Axis trendlines
+             Axis trendlines
             </h3>
             <div className="mb-5 space-y-1.5">
               {axisSeries.map((s) => {
@@ -528,10 +528,10 @@ export default function ProgressView({ onClose, asPage }: Props) {
                     <th className="py-1 pr-2 text-right font-medium">Score</th>
                     <th className="py-1 pr-2 font-medium">Recommendation</th>
                     <th className="py-1 pr-2 text-right font-medium" title="Active session time (pauses excluded)">
-                      Time
+                     Time
                     </th>
                     <th className="py-1 pr-2 text-right font-medium" title="First run with all tests passing">
-                      Green
+                     Green
                     </th>
                     <th className="py-1 pr-2 text-right font-medium">Hints</th>
                     <th className="py-1 pr-2 text-right font-medium">Clarif.</th>
@@ -543,7 +543,7 @@ export default function ProgressView({ onClose, asPage }: Props) {
                   {[...filtered].reverse().map((g) => (
                     <tr key={g.sessionId} className="border-t border-neutral-800 text-neutral-300">
                       <td className="whitespace-nowrap py-1 pr-2">{fmtDate(g.gradedAt)}</td>
-                      <td className="max-w-[160px] truncate py-1 pr-2">{g.problemTitle ?? '—'}</td>
+                      <td className="max-w-[160px] truncate py-1 pr-2">{g.problemTitle ?? 'n/a'}</td>
                       <td className="py-1 pr-2">{MODE_LABELS[g.mode]}</td>
                       <td className="py-1 pr-2 text-right font-medium text-neutral-100">{g.weighted.toFixed(2)}</td>
                       <td className="py-1 pr-2">
@@ -555,13 +555,13 @@ export default function ProgressView({ onClose, asPage }: Props) {
                         )}
                       </td>
                       <td className="py-1 pr-2 text-right">{g.durationMin}m</td>
-                      <td className="py-1 pr-2 text-right">{g.timeToGreenMin !== null ? `${g.timeToGreenMin}m` : '—'}</td>
-                      <td className="py-1 pr-2 text-right">{g.hintAvgLevel !== null ? `L${g.hintAvgLevel}` : '—'}</td>
+                      <td className="py-1 pr-2 text-right">{g.timeToGreenMin !== null ? `${g.timeToGreenMin}m` : 'n/a'}</td>
+                      <td className="py-1 pr-2 text-right">{g.hintAvgLevel !== null ? `L${g.hintAvgLevel}` : 'n/a'}</td>
                       <td className="py-1 pr-2 text-right">
-                        {g.clarificationHits !== null ? `${g.clarificationHits}/8` : '—'}
+                        {g.clarificationHits !== null ? `${g.clarificationHits}/8` : 'n/a'}
                       </td>
                       <td className="py-1 pr-2 text-right">
-                        {g.testsTotal !== null ? `${g.testsPassed}/${g.testsTotal}` : '—'}
+                        {g.testsTotal !== null ? `${g.testsPassed}/${g.testsTotal}` : 'n/a'}
                       </td>
                       <td className="py-1 text-right">
                         <button
@@ -569,7 +569,7 @@ export default function ProgressView({ onClose, asPage }: Props) {
                           title="Delete this grade from the gradebook (session JSON on disk is kept)"
                           className="rounded px-1.5 py-0.5 text-neutral-600 hover:bg-red-900/40 hover:text-red-300"
                         >
-                          ✕
+                          
                         </button>
                       </td>
                     </tr>
