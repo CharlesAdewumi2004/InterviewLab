@@ -1,6 +1,7 @@
 import type { Language, TechTopic } from '../../../shared/protocol';
 import { languageMeta } from '../../../shared/languages';
 import type { ServerProblem } from '../types.js';
+import { LANGUAGE_DEBUG_BANK } from './debug-bank-languages.js';
 
 // Debug-&-optimize exercises: deliberately flawed programs the candidate must
 // read (find phase — graded against the planted-issue key), then fix and
@@ -29,7 +30,7 @@ export interface DebugExercise {
 }
 
 // Spliced in from the authoring workflow (each entry compile-verified).
-export const DEBUG_BANK: DebugExercise[] = [
+const CORE_DEBUG_BANK: DebugExercise[] = [
   {
     "id": "dbg-access-log-rollups",
     "title": "Access log rollups",
@@ -894,6 +895,8 @@ export const DEBUG_BANK: DebugExercise[] = [
 export function getDebugExercise(id: string): DebugExercise | undefined {
   return DEBUG_BANK.find((e) => e.id === id);
 }
+
+export const DEBUG_BANK: DebugExercise[] = [...CORE_DEBUG_BANK, ...LANGUAGE_DEBUG_BANK];
 
 export function randomDebugExercise(language: Language): DebugExercise | undefined {
   const pool = DEBUG_BANK.filter((e) => e.language === language);
