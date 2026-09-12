@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 // Resolve toolchain binaries to absolute paths instead of trusting PATH:
@@ -48,15 +49,39 @@ function onPath(exe: string): string | null {
   return null;
 }
 
-function resolveTool(envVar: string, exe: string, winFallbacks: string[]): string | null {
+const HOME = os.homedir();
+
+/** Expand a `~/...` path against the current user's home directory. */
+function home(rest: string): string {
+  return path.join(HOME, rest);
+}
+
+/**
+ * Resolve a tool: explicit env override, then PATH, then the well-known
+ * install locations for this platform.
+ *
+ * The fallbacks matter more than they look. Toolchains installed the way their
+ * own documentation recommends (rustup into ~/.cargo, the Go tarball into
+ * /usr/local/go, a JDK unpacked into a home directory) are on an interactive
+ * shell's PATH but not on the PATH of a server started from a desktop
+ * launcher, a systemd unit, or a plain PowerShell window. Without this, Run
+ * reports "not installed" for a toolchain sitting right there.
+ */
+function resolveTool(envVar: string, exe: string, fallbacks: string[]): string | null {
   const override = process.env[envVar];
   if (override) return override;
-  return onPath(exe) ?? (WIN ? winFallbacks.find(isFile) ?? null : null);
+  return onPath(exe) ?? fallbacks.find(isFile) ?? null;
 }
 
 /** C++ compiler. Falls back to bare 'g++' so the error stays legible if truly absent. */
 export const CXX =
-  resolveTool('CXX', 'g++', ['C:/msys64/ucrt64/bin/g++.exe', 'C:/msys64/mingw64/bin/g++.exe']) ?? 'g++';
+  resolveTool('CXX', 'g++', [
+    'C:/msys64/ucrt64/bin/g++.exe',
+    'C:/msys64/mingw64/bin/g++.exe',
+    '/usr/bin/g++',
+    '/opt/homebrew/bin/g++',
+    '/usr/local/bin/g++',
+  ]) ?? 'g++';
 
 /** False when no C++ compiler could be found at all (CXX then holds the bare
  * name, so the error message stays legible). Drives the setup doctor. */
@@ -75,19 +100,55 @@ export const CLANGD = resolveTool('CLANGD', 'clangd', [
   'C:/msys64/ucrt64/bin/clangd.exe',
   'C:/msys64/mingw64/bin/clangd.exe',
   'C:/Program Files/LLVM/bin/clangd.exe',
+  '/usr/bin/clangd',
+  '/opt/homebrew/bin/clangd',
+  '/usr/local/bin/clangd',
 ]);
 
-/** JDK compiler, for Java sessions. Null means Java practice is unavailable. */
-export const JAVAC = resolveTool('JAVAC', 'javac', ['C:/Program Files/Java/jdk/bin/javac.exe']);
+// A JDK unpacked by hand, or installed by a version manager, is the common
+// case on developer machines; JAVA_HOME is checked first when it is set.
+function jdkPaths(exe: string): string[] {
+  const javaHome = process.env.JAVA_HOME;
+  return [
+    ...(javaHome ? [path.join(javaHome, 'bin', exe)] : []),
+    home(`.local/toolchains/jdk/bin/${exe}`),
+    home(`.sdkman/candidates/java/current/bin/${exe}`),
+    `/usr/lib/jvm/default-java/bin/${exe}`,
+    `/opt/java/openjdk/bin/${exe}`,
+    `/usr/local/opt/openjdk/bin/${exe}`,
+    `/opt/homebrew/opt/openjdk/bin/${exe}`,
+    'C:/Program Files/Java/jdk/bin/' + exe + '.exe',
+    'C:/Program Files/Eclipse Adoptium/jdk/bin/' + exe + '.exe',
+  ];
+}
 
-/** JVM launcher — paired with JAVAC (a JDK ships both). */
-export const JAVA = resolveTool('JAVA', 'java', ['C:/Program Files/Java/jdk/bin/java.exe']);
+/** JDK compiler, for Java sessions. Null means Java practice is unavailable. */
+export const JAVAC = resolveTool('JAVAC', 'javac', jdkPaths('javac'));
+
+/** JVM launcher, paired with JAVAC (a JDK ships both). */
+export const JAVA = resolveTool('JAVA', 'java', jdkPaths('java'));
 
 /** Go toolchain. Null means Go practice is unavailable. */
-export const GO = resolveTool('GO', 'go', ['C:/Program Files/Go/bin/go.exe', 'C:/Go/bin/go.exe']);
+export const GO = resolveTool('GO', 'go', [
+  '/usr/local/go/bin/go',
+  home('.local/toolchains/go/bin/go'),
+  home('go/bin/go'),
+  '/opt/go/bin/go',
+  '/opt/homebrew/bin/go',
+  '/snap/bin/go',
+  'C:/Program Files/Go/bin/go.exe',
+  'C:/Go/bin/go.exe',
+]);
 
 /** Rust compiler. Null means Rust practice is unavailable. */
-export const RUSTC = resolveTool('RUSTC', 'rustc', [`${process.env.USERPROFILE ?? ''}/.cargo/bin/rustc.exe`]);
+export const RUSTC = resolveTool('RUSTC', 'rustc', [
+  // rustup's default home, which is exactly where the official installer puts
+  // it and exactly what a non-login shell does not have on PATH.
+  home('.cargo/bin/rustc'),
+  '/usr/local/bin/rustc',
+  '/opt/homebrew/bin/rustc',
+  `${process.env.USERPROFILE ?? ''}/.cargo/bin/rustc.exe`,
+]);
 
 /** The Node binary running this server — JavaScript practice always works. */
 export const NODE = process.execPath;
@@ -114,6 +175,7 @@ export const PYTHON =
   onPath('python3') ??
   onPath('python') ??
   onPath('py') ??
+  ['/usr/bin/python3', '/usr/local/bin/python3', '/opt/homebrew/bin/python3'].find(isFile) ??
   (WIN ? 'python' : 'python3');
 
 /** False when no Python interpreter could be found (PYTHON holds a bare name). */
