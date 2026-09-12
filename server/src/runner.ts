@@ -4,27 +4,24 @@ import os from 'node:os';
 import path from 'node:path';
 import type { BuildResult, TestFailure, TestsResult } from '../../shared/protocol';
 import type { Session } from './types.js';
-import { BASH, CPP_PRELUDE, CXX, PRELUDE_FILE, PYTHON, toolchainEnv } from './toolchain.js';
+import { EXE, RUNTIMES, SHELL, type RunPlan, type Step, languageAvailable, missingToolchainMessage, setCppFlags } from './languages.js';
+import { LANGUAGES, languageMeta } from '../../shared/languages';
+import { CXX, toolchainEnv } from './toolchain.js';
 
-const COMPILE_TIMEOUT_MS = 10_000;
-const EXEC_TIMEOUT_MS = 5_000;
+const PROBE_TIMEOUT_MS = 15_000;
 
-// Explicit .exe on Windows — MinGW output naming and extension-less
-// execution are both unreliable outside an MSYS2 shell.
-const EXE = process.platform === 'win32' ? 'prog.exe' : 'a.out';
+// Toolchains differ: MSYS2 MinGW gcc ships no libasan/libubsan, and older gcc
+// (e.g. Debian bookworm's gcc 12) spells C++23 as -std=c++2b. Probe once per
+// server process with trivial compiles and adapt. Memoized as a promise so
+// concurrent runs share one probe instead of racing in the same directory.
+let cppProbe: Promise<void> | null = null;
 
-// Toolchains differ: MSYS2 MinGW gcc ships no libasan/libubsan, and older
-// gcc (e.g. Debian bookworm's gcc 12) spells C++23 as -std=c++2b. Probe once
-// per server process with trivial compiles and adapt. Memoized as a promise
-// so concurrent runs share one probe instead of racing in the same directory.
-let cppProbe: Promise<{ stdFlag: string; sanitize: boolean }> | null = null;
-
-function probeCpp(): Promise<{ stdFlag: string; sanitize: boolean }> {
+function probeCpp(): Promise<void> {
   cppProbe ??= (async () => {
-    const probeDir = path.join(os.tmpdir(), 'practice-ide', 'toolchain-probe');
+    const probeDir = path.join(os.tmpdir(), 'interview-lab', 'toolchain-probe');
     fs.mkdirSync(probeDir, { recursive: true });
     fs.writeFileSync(path.join(probeDir, 'p.cpp'), 'int main(){return 0;}\n');
-    const opts = { cwd: probeDir, timeoutMs: COMPILE_TIMEOUT_MS, env: toolchainEnv() };
+    const opts = { cwd: probeDir, timeoutMs: PROBE_TIMEOUT_MS, env: toolchainEnv() };
 
     let stdFlag = '-std=c++23';
     for (const flag of ['-std=c++23', '-std=c++2b', '-std=c++20']) {
@@ -38,7 +35,7 @@ function probeCpp(): Promise<{ stdFlag: string; sanitize: boolean }> {
 
     const s = await runProcess(CXX, [stdFlag, '-fsanitize=address,undefined', '-o', EXE, 'p.cpp'], opts);
     if (s.code !== 0) console.warn(`ASan/UBSan unavailable with ${CXX} — compiling without sanitizers.`);
-    return { stdFlag, sanitize: s.code === 0 };
+    setCppFlags({ stdFlag, sanitize: s.code === 0 });
   })();
   return cppProbe;
 }
@@ -79,8 +76,8 @@ function runProcess(
       if (!child.pid) return;
       if (process.platform === 'win32') {
         // Negative-PID group kill is POSIX-only. child.kill would terminate
-        // only the g++ driver and orphan cc1plus/ld (which burn CPU and keep
-        // prog.exe locked) — taskkill /T takes down the whole tree.
+        // only the compiler driver and orphan its children (which burn CPU and
+        // keep the output locked) — taskkill /T takes down the whole tree.
         spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' }).on('error', () =>
           child.kill('SIGKILL'),
         );
@@ -102,6 +99,19 @@ function runProcess(
       resolve({ code, stdout, stderr, timedOut });
     });
   });
+}
+
+/** Run one plan step, applying its ulimit wrapper where it asked for one. */
+function runStep(step: Step, workDir: string): Promise<ProcResult> {
+  if (step.ulimit) {
+    const quoted = [step.cmd, ...step.args].map((a) => `'${a.replace(/'/g, `'\\''`)}'`).join(' ');
+    return runProcess(SHELL, ['-c', `ulimit -f 1024; exec ${quoted}`], {
+      cwd: workDir,
+      timeoutMs: step.timeoutMs,
+      env: step.env,
+    });
+  }
+  return runProcess(step.cmd, step.args, { cwd: workDir, timeoutMs: step.timeoutMs, env: step.env });
 }
 
 function parseTestOutput(stdout: string, session: Session): { tests: TestsResult; programOutput: string } {
@@ -168,168 +178,75 @@ function parseTestOutput(stdout: string, session: Session): { tests: TestsResult
   };
 }
 
+function buildError(stderr: string): { build: BuildResult; tests: null } {
+  return { build: { status: 'error', stderr, stdout: '' }, tests: null };
+}
+
 export async function compileAndRun(
   session: Session,
 ): Promise<{ build: BuildResult; tests: TestsResult | null }> {
-  const workDir = path.join(os.tmpdir(), 'practice-ide', session.id);
-  fs.mkdirSync(workDir, { recursive: true });
-  if (session.language === 'python') return runPython(session, workDir);
-  fs.writeFileSync(path.join(workDir, PRELUDE_FILE), CPP_PRELUDE);
+  const language = session.language;
+  const meta = languageMeta(language);
+
+  if (!languageAvailable(language)) return buildError(missingToolchainMessage(language));
 
   const problem = session.problem;
+  // A problem's harness is generated for one language. After a mid-problem
+  // language switch it would no longer compile against the buffer, so say so
+  // plainly instead of drowning the user in a foreign compiler's errors.
+  if (problem && problem.tests.length && problem.language && problem.language !== language) {
+    return buildError(
+      `This problem's tests were generated for ${languageMeta(problem.language).label}, but the session is now in ${meta.label}.\n` +
+        `Switch back to ${languageMeta(problem.language).label}, or load the problem again to regenerate it in ${meta.label}.`,
+    );
+  }
+
   const hasHarness = Boolean(problem && problem.harness && problem.tests.length);
+  const workDir = path.join(os.tmpdir(), 'interview-lab', session.id, language);
+  // A stale binary from a previous run must never be executed after a failed
+  // compile: clear the directory each run.
+  fs.rmSync(workDir, { recursive: true, force: true });
+  fs.mkdirSync(workDir, { recursive: true });
 
-  if (hasHarness && problem) {
-    fs.writeFileSync(path.join(workDir, 'solution.hpp'), session.buffer);
-    const harness = problem.harness.includes('solution.hpp')
-      ? problem.harness
-      : `#include "solution.hpp"\n${problem.harness}`;
-    fs.writeFileSync(path.join(workDir, 'main.cpp'), harness);
-  } else {
-    // No problem loaded yet: compile the buffer as a standalone program.
-    fs.writeFileSync(path.join(workDir, 'main.cpp'), session.buffer);
+  if (language === 'cpp') await probeCpp();
+
+  let plan: RunPlan;
+  try {
+    plan = await RUNTIMES[language].plan({
+      workDir,
+      buffer: session.buffer,
+      harness: hasHarness && problem ? problem.harness : null,
+    });
+  } catch (err) {
+    return buildError(err instanceof Error ? err.message : String(err));
   }
 
-  const { stdFlag, sanitize } = await probeCpp();
-  const compile = await runProcess(
-    CXX,
-    [
-      stdFlag,
-      '-O2',
-      '-Wall',
-      '-Wextra',
-      // LeetCode semantics: bits/stdc++.h + using namespace std, force-
-      // included so buffer line numbers match diagnostics exactly.
-      '-include',
-      PRELUDE_FILE,
-      ...(sanitize ? ['-fsanitize=address,undefined'] : []),
-      '-o',
-      EXE,
-      'main.cpp',
-    ],
-    { cwd: workDir, timeoutMs: COMPILE_TIMEOUT_MS, env: toolchainEnv() },
-  );
+  for (const file of plan.files) fs.writeFileSync(path.join(workDir, file.name), file.content);
 
-  if (compile.timedOut) {
-    return { build: { status: 'error', stderr: '[compilation timed out after 10s]', stdout: '' }, tests: null };
-  }
-  if (compile.code === null && /ENOENT/.test(compile.stderr)) {
-    const installHint =
-      process.platform === 'win32'
-        ? 'Install MSYS2 g++ (pacman -S mingw-w64-ucrt-x86_64-gcc)'
-        : 'Install g++ (or clang++)';
-    return {
-      build: {
-        status: 'error',
-        stderr: `Compiler not found (tried: ${CXX}). ${installHint} or set CXX in .env to your compiler's full path.`,
-        stdout: '',
-      },
-      tests: null,
-    };
-  }
-  if (compile.code !== 0) {
-    return { build: { status: 'error', stderr: compile.stderr.trim(), stdout: '' }, tests: null };
+  for (const step of plan.compile) {
+    const result = await runStep(step, workDir);
+    if (result.timedOut) {
+      return buildError(`[compilation timed out after ${Math.round(step.timeoutMs / 1000)}s]`);
+    }
+    if (result.code === null && /ENOENT|not found/i.test(result.stderr)) {
+      return buildError(missingToolchainMessage(language));
+    }
+    if (result.code !== 0) {
+      // javac and friends put diagnostics on stderr; some tools use stdout.
+      return buildError([result.stderr, result.stdout].filter((s) => s.trim()).join('\n').trim());
+    }
   }
 
-  // ASan reserves ~20TB of virtual address space, so no ulimit -v — cap RSS
-  // through ASan itself instead. Leak detection off to match LeetCode
-  // semantics (linked-list problems "leak" by design).
-  // On Windows the binary runs directly: ulimit doesn't work under MSYS2
-  // bash there, and PATH (via toolchainEnv) must carry the runtime DLLs.
-  const execEnv = {
-    ...toolchainEnv(),
-    ASAN_OPTIONS: 'hard_rss_limit_mb=512:detect_leaks=0',
-    UBSAN_OPTIONS: 'print_stacktrace=1',
-  };
-  const exec =
-    process.platform === 'win32'
-      ? await runProcess(path.join(workDir, EXE), [], { cwd: workDir, timeoutMs: EXEC_TIMEOUT_MS, env: execEnv })
-      : await runProcess(BASH, ['-c', `ulimit -f 1024; exec ./${EXE}`], {
-          cwd: workDir,
-          timeoutMs: EXEC_TIMEOUT_MS,
-          env: execEnv,
-        });
+  const exec = await runStep(plan.exec, workDir);
 
   let runtimeStderr = exec.stderr.trim();
   if (exec.timedOut) {
-    runtimeStderr = [runtimeStderr, '[execution timed out after 5s — killed]'].filter(Boolean).join('\n');
+    runtimeStderr = [runtimeStderr, `[execution timed out after ${Math.round(plan.exec.timeoutMs / 1000)}s — killed]`]
+      .filter(Boolean)
+      .join('\n');
   } else if (exec.code === null) {
     runtimeStderr = [runtimeStderr, '[program failed to launch]'].filter(Boolean).join('\n');
   } else if (exec.code !== 0) {
-    runtimeStderr = [runtimeStderr, `[process exited with code ${exec.code}]`].filter(Boolean).join('\n');
-  }
-
-  if (hasHarness) {
-    const { tests, programOutput } = parseTestOutput(exec.stdout, session);
-    return {
-      build: { status: 'ok', stderr: runtimeStderr, stdout: programOutput },
-      tests,
-    };
-  }
-
-  return {
-    build: { status: 'ok', stderr: runtimeStderr, stdout: exec.stdout.replace(/\r\n/g, '\n').trim() },
-    tests: null,
-  };
-}
-
-// Python path: the buffer is solution.py, the harness is main.py (importing
-// solution). "Compile" is py_compile — it surfaces syntax errors with real
-// line numbers the same way the C++ build step does — and execution runs
-// unbuffered (-u) so ###CASE markers survive a timeout kill.
-const PY_EXEC_TIMEOUT_MS = 10_000; // interpreter startup + LeetCode-ish python allowance
-
-async function runPython(
-  session: Session,
-  workDir: string,
-): Promise<{ build: BuildResult; tests: TestsResult | null }> {
-  const problem = session.problem;
-  const hasHarness = Boolean(problem && problem.harness && problem.tests.length);
-
-  const sources: string[] = [];
-  if (hasHarness && problem) {
-    fs.writeFileSync(path.join(workDir, 'solution.py'), session.buffer);
-    const harness = problem.harness.includes('from solution import')
-      ? problem.harness
-      : `from solution import *\n${problem.harness}`;
-    fs.writeFileSync(path.join(workDir, 'main.py'), harness);
-    sources.push('solution.py', 'main.py');
-  } else {
-    fs.writeFileSync(path.join(workDir, 'main.py'), session.buffer);
-    sources.push('main.py');
-  }
-
-  const compile = await runProcess(PYTHON, ['-m', 'py_compile', ...sources], {
-    cwd: workDir,
-    timeoutMs: COMPILE_TIMEOUT_MS,
-    env: toolchainEnv(),
-  });
-  if (compile.code === null && /ENOENT/.test(compile.stderr)) {
-    return {
-      build: {
-        status: 'error',
-        stderr: `Python not found (tried: ${PYTHON}). Install Python 3 or set PYTHON in .env to your interpreter's full path.`,
-        stdout: '',
-      },
-      tests: null,
-    };
-  }
-  if (compile.code !== 0) {
-    return { build: { status: 'error', stderr: compile.stderr.trim(), stdout: '' }, tests: null };
-  }
-
-  const exec = await runProcess(PYTHON, ['-u', 'main.py'], {
-    cwd: workDir,
-    timeoutMs: PY_EXEC_TIMEOUT_MS,
-    env: toolchainEnv(),
-  });
-
-  let runtimeStderr = exec.stderr.trim();
-  if (exec.timedOut) {
-    runtimeStderr = [runtimeStderr, `[execution timed out after ${PY_EXEC_TIMEOUT_MS / 1000}s — killed]`]
-      .filter(Boolean)
-      .join('\n');
-  } else if (exec.code !== null && exec.code !== 0) {
     runtimeStderr = [runtimeStderr, `[process exited with code ${exec.code}]`].filter(Boolean).join('\n');
   }
 
@@ -341,4 +258,38 @@ async function runPython(
     build: { status: 'ok', stderr: runtimeStderr, stdout: exec.stdout.replace(/\r\n/g, '\n').trim() },
     tests: null,
   };
+}
+
+/**
+ * Which languages this machine can actually run, with the version string the
+ * toolchain reports. Powers the setup doctor and the language picker.
+ */
+export async function toolchainReport(): Promise<
+  { language: string; label: string; available: boolean; version: string | null; toolchain: string; install: string }[]
+> {
+  return Promise.all(
+    LANGUAGES.map(async (meta) => {
+      const runtime = RUNTIMES[meta.id];
+      const tool = runtime.tool();
+      if (!tool) {
+        return { language: meta.id, label: meta.label, available: false, version: null, toolchain: meta.toolchain, install: meta.install };
+      }
+      const probeDir = path.join(os.tmpdir(), 'interview-lab');
+      fs.mkdirSync(probeDir, { recursive: true });
+      const result = await runProcess(tool, runtime.versionArgs, {
+        cwd: probeDir,
+        timeoutMs: 8_000,
+        env: toolchainEnv(),
+      });
+      const version = `${result.stdout}\n${result.stderr}`.split('\n').map((l) => l.trim()).find(Boolean) ?? null;
+      return {
+        language: meta.id,
+        label: meta.label,
+        available: result.code === 0,
+        version: result.code === 0 ? version : null,
+        toolchain: meta.toolchain,
+        install: meta.install,
+      };
+    }),
+  );
 }

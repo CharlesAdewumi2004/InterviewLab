@@ -37,7 +37,7 @@ function personaLabel(p: Persona): string {
   if (p === 'interviewer') return 'Interviewer';
   if (p === 'sysdesign') return 'Sys Design';
   if (p === 'behavioral') return 'Behavioral';
-  if (p === 'bloomberg') return 'Bloomberg';
+  if (p === 'mock') return 'Interviewer';
   if (p === 'techq') return 'Tech Round';
   if (p === 'oopdesign') return 'OOP Design';
   return 'Tutor';
@@ -47,7 +47,7 @@ function personaLabel(p: Persona): string {
 function personaChatLabel(p: Persona): string {
   if (p === 'sysdesign') return 'design interviewer';
   if (p === 'behavioral') return 'behavioral interviewer';
-  if (p === 'bloomberg') return 'Bloomberg interviewer';
+  if (p === 'mock') return 'Full mock interviewer';
   if (p === 'tutor') return 'tutor';
   if (p === 'techq') return 'interviewer';
   if (p === 'oopdesign') return 'design interviewer';

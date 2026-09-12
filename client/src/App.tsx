@@ -24,11 +24,16 @@ import WorkspaceBar from './components/WorkspaceBar';
 import HomePage from './components/HomePage';
 import ScorecardView from './components/ScorecardView';
 import ProgressView from './components/ProgressView';
+import SetupPage from './components/SetupPage';
 import { useHashRoute } from './hooks/useHashRoute';
 import { NarrationCapture, SentenceSpeaker } from './lib/voice';
 import { bindLspSend, handleLspMessage } from './lib/lsp';
 
 type DebriefState = { scorecard: Scorecard; grade: GradeSummary } | null;
+
+// Personas that belong to the coding workspace, as opposed to a page that
+// pins its own (design, OOP, tech, behavioral).
+const CODING_PERSONAS: Persona[] = ['interviewer', 'mock', 'tutor'];
 
 export default function App() {
   const [persona, setPersona] = useState<Persona>('interviewer');
@@ -440,11 +445,11 @@ export default function App() {
   // and on fresh sessions (sessionEpoch), guarded to avoid redundant sends.
   const lastCodingPersonaRef = useRef<Persona>('interviewer');
   useEffect(() => {
-    if (['interviewer', 'bloomberg', 'tutor'].includes(persona)) lastCodingPersonaRef.current = persona;
+    if (CODING_PERSONAS.includes(persona)) lastCodingPersonaRef.current = persona;
   }, [persona]);
   useEffect(() => {
     if (!connected) return;
-    const coding = ['interviewer', 'bloomberg', 'tutor'].includes(personaRef.current);
+    const coding = CODING_PERSONAS.includes(personaRef.current);
     const want =
       route === 'design'
         ? 'sysdesign'
@@ -497,6 +502,7 @@ export default function App() {
     <div className="flex h-full flex-col">
       <NavBar
         route={route}
+        inSession={inWorkspace}
         connected={connected}
         startedAt={startedAt}
         paused={pauseState.paused}
@@ -522,6 +528,11 @@ export default function App() {
       {route === 'progress' && (
         <div className="min-h-0 flex-1">
           <ProgressView asPage />
+        </div>
+      )}
+      {route === 'setup' && (
+        <div className="min-h-0 flex-1">
+          <SetupPage onCvUpdated={handleCvUpdated} />
         </div>
       )}
 

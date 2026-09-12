@@ -5,7 +5,7 @@ import type { Session, UsageEntry } from './types.js';
 // back to the chat model at call time when the plan doesn't include Opus.
 export const MODELS = {
   chat: 'claude-sonnet-5',
-  heavy: 'claude-opus-4-8',
+  heavy: 'claude-opus-5',
   compact: 'claude-haiku-4-5',
 } as const;
 
@@ -268,6 +268,27 @@ export async function structuredCall<T>(opts: {
   return { data, usage };
 }
 
+/**
+ * One cheap round trip to verify the machine can actually reach the model on
+ * the user's subscription. Used by the setup page's "Test connection" button:
+ * the boot-time check only sees whether credentials exist, not whether they
+ * work.
+ */
+export async function probeModelAccess(): Promise<{ ok: boolean; detail: string; model: string }> {
+  try {
+    const { text } = await runQuery({
+      purpose: 'compact',
+      model: MODELS.compact,
+      effort: 'low',
+      systemPrompt: 'Reply with the single word: ready.',
+      prompt: 'ping',
+    });
+    return { ok: true, detail: text.trim().slice(0, 80) || 'ready', model: MODELS.compact };
+  } catch (err) {
+    return { ok: false, detail: err instanceof Error ? err.message : String(err), model: MODELS.compact };
+  }
+}
+
 // §6.2: past 20 live turns, fold the older ones into a ~150-word summary and
 // keep the last 10 verbatim. Runs off the hot path after a turn completes.
 // One compaction per session at a time: it's fire-and-forget, so a fast next
@@ -305,7 +326,7 @@ export async function maybeCompact(session: Session): Promise<UsageEntry | null>
       model: MODELS.compact,
       effort: 'low', // mechanical summarization
       systemPrompt:
-        'Summarize this C++ interview-practice conversation segment in at most 150 words: what was discussed, decisions made, mistakes and corrections, and any points the interviewer already raised (so they are not repeated). Output only the summary.',
+        'Summarize this interview-practice conversation segment in at most 150 words: what was discussed, decisions made, mistakes and corrections, and any points the interviewer already raised (so they are not repeated). Output only the summary.',
       prompt: `${prior}${transcript}`,
     });
     if (!text.trim()) return null;

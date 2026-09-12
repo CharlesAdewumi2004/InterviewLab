@@ -5,13 +5,37 @@
 
 export type OopDifficulty = 'easy' | 'medium' | 'hard';
 
+/**
+ * How much of the spec the interviewer states up front.
+ *
+ * Distilled from the recorded OOD mocks: interviewers state everything up to,
+ * but not including, the thing they are grading.
+ *
+ * - 'api'      — the question is posed as ONE class the caller talks to, so the
+ *                method list is handed over verbatim ("put, get, delete,
+ *                contains_key"). The graded work lives BEHIND the API — data
+ *                structures, expiry, seams — so naming the methods costs no
+ *                signal, and withholding them only tests mind-reading.
+ * - 'usecases' — the question is a domain of interacting objects. The
+ *                interviewer gives the observable flow in ordinary user
+ *                language ("a user can search by name or by city, then book a
+ *                room") and NO method names, because deciding what the API is
+ *                IS the graded work.
+ *
+ * This drives the interviewer's conduct (see prompts/oop.ts): in 'api' mode the
+ * signature gate tests type shaping; in 'usecases' mode it tests comprehension,
+ * which is only fair because the use cases were stated.
+ */
+export type OopSpecMode = 'api' | 'usecases';
+
 export interface OopQuestion {
   id: string;
   title: string;
   difficulty: OopDifficulty;
   asks: string; // one line: what's being designed
   patterns: string[]; // the design patterns/principles that are the signal
-  prompt: string; // spoken by the interviewer, deliberately underspecified
+  specMode: OopSpecMode; // how much the interviewer states up front
+  prompt: string; // spoken by the interviewer; underspecified per specMode
   brief: {
     requirements: string[]; // what a good candidate extracts by asking
     entities: string[]; // expected core classes + relationships
@@ -36,7 +60,8 @@ export const OOP_BANK: OopQuestion[] = [
       "Single Responsibility",
       "Encapsulation"
     ],
-    "prompt": "Let's design a parking lot. Show me the classes you'd write for the software that runs one.",
+    "specMode": "usecases",
+    "prompt": "Let's design the software that runs a parking lot. Drivers pull in and take a ticket, they park, and on the way out they hand the ticket back and pay for their stay \u2014 show me the classes you'd write.",
     "brief": {
       "requirements": [
         "What parks here? Land on three vehicle types (motorcycle, car, van) and spot sizes (small, medium, large) with a fit rule: a vehicle fits its own size or larger. If they never ask, they'll design for 'a car' and the first extension breaks them.",
@@ -94,6 +119,7 @@ export const OOP_BANK: OopQuestion[] = [
       "Single Responsibility",
       "Encapsulation"
     ],
+    "specMode": "usecases",
     "prompt": "Design a vending machine — the software side. It takes coins, someone picks a snack, and it dispenses.",
     "brief": {
       "requirements": [
@@ -152,6 +178,7 @@ export const OOP_BANK: OopQuestion[] = [
       "Dependency injection (RNG)",
       "Value semantics"
     ],
+    "specMode": "usecases",
     "prompt": "Design a standard deck of playing cards. Then use it to build a simple game — let's say Blackjack.",
     "brief": {
       "requirements": [
@@ -210,6 +237,7 @@ export const OOP_BANK: OopQuestion[] = [
       "Single Responsibility",
       "Observer (extension)"
     ],
+    "specMode": "usecases",
     "prompt": "Design the software for a small library. Members borrow books and bring them back.",
     "brief": {
       "requirements": [
@@ -270,7 +298,8 @@ export const OOP_BANK: OopQuestion[] = [
       "single-responsibility",
       "composition-over-inheritance"
     ],
-    "prompt": "Design the software that controls the elevators in an office building. Walk me through your classes first, then sketch the key ones in code.",
+    "specMode": "usecases",
+    "prompt": "Design the software that controls the elevators in an office building: people are waiting on floors to be picked up, they're all heading to different floors, and it has to get everyone where they're going. Walk me through your classes first, then sketch the key ones in code.",
     "brief": {
       "requirements": [
         "How many elevator cars? (interviewer: start with N cars in one bank, but design so one car works alone)",
@@ -329,7 +358,8 @@ export const OOP_BANK: OopQuestion[] = [
       "Factory (setup/promotion)",
       "GRASP information expert"
     ],
-    "prompt": "Design a chess game that two people can play locally. I mainly care about how you model the pieces and enforce the rules.",
+    "specMode": "usecases",
+    "prompt": "Design a chess game that two people can play locally on the same machine. They alternate turns entering moves, anything that isn't a legal move gets rejected, and play continues until the game is over.",
     "brief": {
       "requirements": [
         "Two local human players, standard rules, no AI or networking (interviewer confirms; AI is an extension)",
@@ -389,6 +419,7 @@ export const OOP_BANK: OopQuestion[] = [
       "single source of truth for order ownership",
       "Strategy (matching policy, extension only)"
     ],
+    "specMode": "api",
     "prompt": "Design a system that accepts orders for a security. Orders must be processed first-come-first-served, and at any moment I should be able to ask for the lowest-priced order currently in the system. Talk through your design and complexity, then code the core classes.",
     "brief": {
       "requirements": [
@@ -449,6 +480,7 @@ export const OOP_BANK: OopQuestion[] = [
       "RAII for lock release",
       "information expert (availability lives on Show)"
     ],
+    "specMode": "usecases",
     "prompt": "Design the booking system for a cinema: users pick a showtime, choose seats, and pay. Two users must never end up holding the same seat.",
     "brief": {
       "requirements": [
@@ -514,7 +546,8 @@ export const OOP_BANK: OopQuestion[] = [
       "Composite (macro/coalesced edits)",
       "SRP / separation of document from history"
     ],
-    "prompt": "Design a text editor that supports undo and redo. Talk me through how you'd structure it, then sketch the classes in C++.",
+    "specMode": "api",
+    "prompt": "Design a text editor that supports four operations to start: insert text at a position, delete a range of text, undo, and redo. Talk me through how you'd structure it, then sketch the classes in C++.",
     "brief": {
       "requirements": [
         "Edit operations in scope: insert and delete at a position first; replace/format can be composed later — candidate should ask rather than assume",
@@ -544,7 +577,7 @@ export const OOP_BANK: OopQuestion[] = [
         "Memento must appear as a trade-off, not an implementation: strong candidates articulate when snapshots win — operations that are hard to invert (regex replace-all, reformat-document) — and propose hybrid checkpointing (periodic snapshot + deltas between). Never mentioning memento at all is a gap; using only mementos is a bigger one",
         "Composite for keystroke coalescing: shows they thought about UX granularity vs data granularity. Missing it means every character is its own undo step and they never questioned it",
         "SRP: Document knows text, History knows sequencing, commands know inversion. Undo logic living inside Document (an undo() method on the buffer) signals the candidate couldn't find the seam",
-        "Ownership discipline: unique_ptr stacks vs raw new/delete is a direct C++ maturity signal for a Bloomberg loop"
+        "Ownership discipline: unique_ptr stacks vs raw new/delete is a direct C++ maturity signal"
       ],
       "extensions": [
         "\"Coalesce a burst of typing into one undo step\" — CompositeCommand plus a timer/heuristic in Editor; a good answer changes nothing in the Command interface or History",
@@ -576,7 +609,8 @@ export const OOP_BANK: OopQuestion[] = [
       "Factory (per-key state)",
       "Separation of concurrency policy from algorithm"
     ],
-    "prompt": "Several teams at the firm need rate limiting in their services, and they each want slightly different behavior. Design a rate-limiting library they can all share.",
+    "specMode": "api",
+    "prompt": "Several teams at the firm need rate limiting in their services, and they each want slightly different behavior, so design a rate-limiting library they can all share. From the caller's side it's one call \u2014 tryAcquire \u2014 which asks whether an action is allowed right now and comes straight back with a yes or no.",
     "brief": {
       "requirements": [
         "It is a library, not a service: no network, no background threads, no logging policy — callers decide what to do on rejection; candidate should surface this distinction unprompted or when nudged",
@@ -640,6 +674,7 @@ export const OOP_BANK: OopQuestion[] = [
       "Strategy (matching policy, as escalation)",
       "State (order lifecycle, lightweight)"
     ],
+    "specMode": "usecases",
     "prompt": "Design the classes for an in-memory matching engine: it accepts buy and sell orders and produces trades. Start by telling me what you'd need to know, then sketch the design in C++.",
     "brief": {
       "requirements": [
@@ -705,6 +740,7 @@ export const OOP_BANK: OopQuestion[] = [
       "Producer-consumer queue ownership",
       "Decorator (per-channel rate limiting, as escalation)"
     ],
+    "specMode": "usecases",
     "prompt": "Design a system that alerts users when things happen on our platform — email, SMS, push, whatever we add next. Deliveries can fail. Walk me through your design, then sketch the classes.",
     "brief": {
       "requirements": [
@@ -773,6 +809,7 @@ export const OOP_BANK: OopQuestion[] = [
       "Encapsulation via accessors instead of touching another object's fields directly",
       "Model nouns as classes; watch for the non-obvious noun (a booking)"
     ],
+    "specMode": "usecases",
     "prompt": "We're designing an online hotel booking system. A user can search for a hotel by name, or search by city, and then once they have a hotel they can book a room. Start with an interface class the user interacts with, model the classes, then implement some of the functionality. I'll dictate the spec as we go and you can ask questions.",
     "brief": {
       "requirements": [
@@ -843,6 +880,7 @@ export const OOP_BANK: OopQuestion[] = [
       "YAGNI — don't build Entry/File/Folder hierarchy or premature abstractions",
       "Encapsulation of traversal helper shared by read and write"
     ],
+    "specMode": "api",
     "prompt": "We're going to design a simplified file system. It's a class that supports two operations to start: write, which takes a string path and a value and writes the value at the end of the path, and read, which takes a path and returns the value there. If the path doesn't already exist, write should create all the intermediate paths. Go ahead and clarify whatever you need.",
     "brief": {
       "requirements": [
@@ -910,6 +948,7 @@ export const OOP_BANK: OopQuestion[] = [
       "Reverse edge = 1 / rate; derive rather than store redundantly",
       "Hint responsiveness: treat 'do you really want to do that?' as a redirect, not a challenge to defend"
     ],
+    "specMode": "api",
     "prompt": "We're going to design a currency exchange. You'll write a class that supports adding a conversion — a from-currency, a to-currency, and a rate — deleting one, and converting a given amount from one currency to another. I'll give the problem verbally and it may not be complete, so ask as needed. How do you want to represent this?",
     "brief": {
       "requirements": [
@@ -978,6 +1017,7 @@ export const OOP_BANK: OopQuestion[] = [
       "Map keyed by identity you actually look up by (recipe name -> Recipe), not iterated linearly",
       "Constructor-time precomputation vs lazy computation (time/space tradeoff)"
     ],
+    "specMode": "usecases",
     "prompt": "We're designing a smart recipe app. It knows the recipes — a recipe is just some input ingredients that produce one output product — and it's connected to a smart fridge that knows what ingredients you have and how many. First model this, then let's talk about whether a user can cook a given recipe.",
     "brief": {
       "requirements": [
@@ -1049,6 +1089,7 @@ export const OOP_BANK: OopQuestion[] = [
       "Per-read validation once the 'data always valid' invariant is dropped",
       "Stale-entry invalidation via TTL-stamp matching on heap pop"
     ],
+    "specMode": "api",
     "prompt": "Design an in-memory key-value store with a time-to-live attribute for caching. Here's a basic API and some basic requirements — put, get, delete, contains_key, each key lives for a TTL in seconds. Start by implementing these, then we'll come back and refine.",
     "brief": {
       "requirements": [
@@ -1128,13 +1169,30 @@ export function listOopQuestions(): { id: string; title: string; difficulty: Oop
 }
 
 // System-prompt block: the selected question's private ground truth.
+// What the interviewer may state freely versus what stays behind the ask,
+// for this question's specMode. The split is the whole point: state everything
+// up to, but not including, the thing being graded.
+const SPEC_MODE_CONDUCT: Record<OopSpecMode, string> = {
+  api: `SPEC MODE: API — this question is posed as a single class the caller talks to, and you have ALREADY NAMED the caller-facing operations in the prompt.
+- The method list is NOT a secret and never was. If the candidate asks what the operations are, or asks you to repeat or clarify one, ANSWER PLAINLY AND IMMEDIATELY. Do not bounce it back, do not make them guess the surface area. Withholding it here tests mind-reading, not design.
+- Answer parameter/return/semantics questions about those operations directly too ("does delete on a missing key throw or no-op?" — just pick and say). These are spec facts, not design decisions.
+- The signature gate in this mode grades TYPE SHAPING, not recall: given the operations you named, do they choose sensible parameters and return types (optional vs exception for a normal-failure outcome, const-correctness, by-value vs by-reference, who owns what)? Push there.
+- What DOES stay behind the ask: everything behind the API. Data structures, expiry/eviction, the seams that make behaviour swappable, concurrency, and every relationship or edge case flagged in the requirements below. That is the graded work.`,
+  usecases: `SPEC MODE: USE CASES — this question is a domain of interacting objects, and the prompt states the observable flow in user language WITHOUT naming any operation.
+- Deciding what the API even is IS the graded work, so do NOT hand over method names, class names, or a decomposition. When asked "what methods should it have?", hand that back: "That's what I'm asking you — what does a caller need to be able to do?"
+- But DO answer questions about the DOMAIN cheaply and directly: what the thing must be able to do, who the actors are, what a term means, what counts as in scope. Those are spec facts you are dictating, not design decisions, and real interviewers dictate them freely as the round goes.
+- The signature gate in this mode is the real comprehension test: can they turn the use cases you stated into a coherent set of operations? It is fair precisely because you stated the use cases — so make sure you have, before holding them to it.`,
+};
+
 export function oopBriefBlock(q: OopQuestion): string {
   const b = q.brief;
   return [
     `SELECTED OOP QUESTION: ${q.title} (${q.difficulty}; ${q.asks}; expected pattern signal: ${q.patterns.join(', ')})`,
     `You have already stated the prompt: "${q.prompt}"`,
     '',
-    'PRIVATE GROUND TRUTH — release one fact at a time on request, never volunteer, never enumerate:',
+    SPEC_MODE_CONDUCT[q.specMode],
+    '',
+    'PRIVATE GROUND TRUTH — release on request, never volunteer, never enumerate:',
     `Requirements a good candidate extracts by asking:\n${b.requirements.map((r) => `- ${r}`).join('\n')}`,
     `Expected decomposition (core classes and relationships):\n${b.entities.map((e) => `- ${e}`).join('\n')}`,
     `Key interfaces and why they're shaped that way:\n${b.interfaces.map((i) => `- ${i}`).join('\n')}`,

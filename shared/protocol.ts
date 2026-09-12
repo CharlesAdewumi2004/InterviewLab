@@ -1,10 +1,23 @@
 // WebSocket protocol shared between client and server.
 
+import type { Language } from './languages';
+
+export type { Language };
+
 // interviewer = technical coding round; sysdesign and behavioral are
 // dedicated round types (each grades into its own §3 mode via axes E/F).
 // techq = technical-knowledge drills (verbal + escalations + debug exercises);
-// oopdesign = low-level OOP design, talk-then-code.
-export type Persona = 'interviewer' | 'sysdesign' | 'behavioral' | 'tutor' | 'bloomberg' | 'techq' | 'oopdesign';
+// oopdesign = low-level OOP design, talk-then-code; mock = the full loop
+// simulation (intro, two coding questions, your questions back, debrief).
+export type Persona = 'interviewer' | 'sysdesign' | 'behavioral' | 'tutor' | 'mock' | 'techq' | 'oopdesign';
+
+// Sessions and gradebook rows written before a persona was renamed still hold
+// the old id; normalize on read so history keeps rendering.
+const PERSONA_ALIASES: Record<string, Persona> = { bloomberg: 'mock' };
+
+export function normalizePersona(value: string): Persona {
+  return PERSONA_ALIASES[value] ?? (value as Persona);
+}
 
 // Topic chips for the tech-knowledge round — mirror the bank's topic keys.
 export type TechTopic =
@@ -16,8 +29,6 @@ export type TechTopic =
   | 'concurrency'
   | 'dsinternals'
   | 'data';
-
-export type Language = 'cpp' | 'python';
 
 export interface Selection {
   startLine: number;

@@ -2,6 +2,7 @@ import { memo, useEffect, useRef } from 'react';
 import MonacoEditor, { type Monaco, type OnMount } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import type { Cursor, Language, Selection } from '../../../shared/protocol';
+import { DEFAULT_LANGUAGE, LANGUAGES, languageMeta } from '../../../shared/languages';
 import { EDITOR_OPTIONS, setupMonaco } from '../lib/monacoConfig';
 
 export interface EditorState {
@@ -15,24 +16,9 @@ export interface EditorApi {
   setValue: (value: string) => void;
 }
 
-// Mirrors the server's DEFAULT_BUFFERS (session.ts) — the session:ready
-// snapshot overwrites this either way.
-const DEFAULT_BUFFER = `// All standard headers are pre-included and \`using namespace std\` is on
-// (LeetCode-style) — no #includes needed.
-// Paste a rough problem into the left pane to generate a stub and tests,
-// or just write code here and hit Ctrl/Cmd+Enter to compile and run.
-
-int main() {
-    cout << "hello" << endl;
-    return 0;
-}
-`;
-
-const DEFAULT_PYTHON_BUFFER = `# Paste a rough problem into the left pane to generate a stub and tests,
-# or just write code here and hit Ctrl/Cmd+Enter to run.
-
-print("hello")
-`;
+// The same starting buffers the server hands out (shared/languages.ts), so
+// "untouched default" means the same thing on both sides.
+const DEFAULT_BUFFERS = LANGUAGES.map((l) => l.defaultBuffer.trim());
 
 /**
  * True when the buffer holds no work worth protecting — an untouched language
@@ -43,7 +29,7 @@ print("hello")
  */
 export function isPristineBuffer(buffer: string): boolean {
   const b = buffer.trim();
-  return b === '' || b === DEFAULT_BUFFER.trim() || b === DEFAULT_PYTHON_BUFFER.trim();
+  return b === '' || DEFAULT_BUFFERS.includes(b);
 }
 
 interface Props {
@@ -130,9 +116,9 @@ export default memo(function Editor({ language, onState, onRun, onFocusChat, onR
 
   return (
     <MonacoEditor
-      language={language}
+      language={languageMeta(language).monaco}
       theme="vs-dark"
-      defaultValue={DEFAULT_BUFFER}
+      defaultValue={languageMeta(DEFAULT_LANGUAGE).defaultBuffer}
       options={EDITOR_OPTIONS}
       onMount={handleMount}
     />

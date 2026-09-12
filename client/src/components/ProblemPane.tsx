@@ -140,7 +140,7 @@ interface CodingSuggestion {
   lc: number | null;
   topic: string;
   difficulty: 'easy' | 'medium' | 'hard';
-  pools: ('bloomberg' | 'general')[];
+  pools: ('core' | 'extended')[];
   seed: string;
 }
 
@@ -163,7 +163,7 @@ export default memo(function ProblemPane({
   const [delivery, setDelivery] = useState<'text' | 'oral'>('text');
   const [framing, setFraming] = useState<'scenario' | 'plain'>('scenario');
   const [showIntake, setShowIntake] = useState(false);
-  // Frequency-grounded suggestions (Bloomberg tier-1 / grad top-40) — the
+  // Frequency-grounded suggestions (core screen pool / extended set) — the
   // pick fills the intake box; Format then disguises it as a scenario.
   const [suggestions, setSuggestions] = useState<CodingSuggestion[] | null>(null);
   const [picked, setPicked] = useState<CodingSuggestion | null>(null);
@@ -175,7 +175,7 @@ export default memo(function ProblemPane({
       .catch(() => setSuggestions(null));
   }, []);
 
-  const suggest = (pool: 'bloomberg' | 'general') => {
+  const suggest = (pool: 'core' | 'extended') => {
     if (!suggestions) return;
     const inPool = suggestions.filter((q) => q.pools.includes(pool));
     const q = inPool[Math.floor(Math.random() * inPool.length)];
@@ -215,18 +215,18 @@ export default memo(function ProblemPane({
         {suggestions && (
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => suggest('bloomberg')}
-              title="Random pick from the most-asked Bloomberg-tagged questions (July 2026 frequency data + candidate reports)"
+              onClick={() => suggest('core')}
+              title="Random pick from the questions that come up most in real screens (2026 frequency data + candidate reports)"
               className="rounded bg-neutral-800 px-2 py-1 text-xs text-orange-300 hover:bg-neutral-700"
             >
-              🎲 Bloomberg pick
+              🎲 Most-asked
             </button>
             <button
-              onClick={() => suggest('general')}
-              title="Random pick from the grad-level big-tech top-40"
+              onClick={() => suggest('extended')}
+              title="Random pick from the wider commonly drilled set"
               className="rounded bg-neutral-800 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
             >
-              🎲 Big-tech pick
+              🎲 Wider bank
             </button>
             {picked && (
               <span className="truncate text-[10px] text-neutral-500">

@@ -46,8 +46,8 @@ export default memo(function OopBank({ oopQuestion, onOopPick, sessionEpoch }: P
         </div>
         <p className="text-xs text-neutral-500">{oopQuestion.asks}</p>
         <p className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-500">
-          🗣 The interviewer stated the prompt in chat — deliberately underspecified; scope is yours to extract by
-          asking.
+          🗣 The interviewer stated the prompt in chat. The spec is incomplete on purpose — ask. Questions about what
+          the software must do get answered straight; what the classes and methods are is yours to decide.
         </p>
         <div className="rounded bg-neutral-900 p-2 text-xs leading-relaxed text-neutral-600">
           Talk first (you drive it): scope → core classes with one-line responsibilities → key interfaces → where

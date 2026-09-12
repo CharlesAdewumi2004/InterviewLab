@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import type { Language } from '../../../shared/protocol';
+import { LANGUAGES } from '../../../shared/languages';
+import { cachedSetup, type ToolchainRow } from '../lib/setup';
 import {
   getPreferredVoiceName,
   listEnglishVoices,
@@ -52,6 +55,54 @@ export function Segmented<T extends string>({
           {o.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Working-language picker. Languages whose toolchain is missing stay
+ * selectable but are marked, because everything except Run still works in
+ * them — and the label is how someone discovers they need to install one.
+ */
+export function LanguagePicker({ value, onChange }: { value: Language; onChange: (l: Language) => void }) {
+  const [rows, setRows] = useState<ToolchainRow[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    cachedSetup().then(
+      (s) => live && setRows(s.languages),
+      () => live && setRows(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const available = (id: Language) => rows?.find((r) => r.language === id)?.available ?? true;
+  const current = rows?.find((r) => r.language === value);
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as Language)}
+        title="Language for this session — stubs, tests and grading all follow it"
+        className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-800"
+      >
+        {LANGUAGES.map((l) => (
+          <option key={l.id} value={l.id}>
+            {l.label}
+            {available(l.id) ? '' : ' — not installed'}
+          </option>
+        ))}
+      </select>
+      {current && !current.available && (
+        <span
+          className="cursor-help text-[11px] text-amber-400"
+          title={`Run needs ${current.toolchain}. ${current.install}`}
+        >
+          no toolchain
+        </span>
+      )}
     </div>
   );
 }

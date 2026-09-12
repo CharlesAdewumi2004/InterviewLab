@@ -8,10 +8,11 @@ import { fileURLToPath } from 'node:url';
 import type { IncomingMessage } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { ClientMessage, ClientProblem, Scorecard, ServerMessage, TechTopic, Turn } from '../../shared/protocol';
-import { activeMs, pausedMsUntil, SessionStore } from './session.js';
+import { activeMs, pausedMsUntil, SESSIONS_DIR, SessionStore } from './session.js';
 import { assembleTurn, buildSystemPrompt } from './context.js';
-import { ChatSession, maybeCompact, structuredCall } from './claude.js';
+import { ChatSession, maybeCompact, probeModelAccess, structuredCall } from './claude.js';
 import { ClangdSession } from './clangd.js';
+import { CLANGD } from './toolchain.js';
 import { deleteGrade, listGrades, recordGrade } from './gradebook.js';
 import { dailyRecap } from './recap.js';
 import { getDesignQuestion, listDesignQuestions, randomDesignQuestion } from './sysdesign/bank.js';
@@ -20,7 +21,8 @@ import { debugToProblem, getDebugExercise, listDebugExercises, randomDebugExerci
 import { getOopQuestion, listOopQuestions, randomOopQuestion } from './oop/bank.js';
 import { clearCv, cvStatus, setCv } from './cv.js';
 import { listCodingQuestions } from './coding-bank.js';
-import { compileAndRun } from './runner.js';
+import { compileAndRun, toolchainReport } from './runner.js';
+import { getProfile, setProfile, type Profile } from './profile.js';
 import { intakePrompt, INTAKE_SCHEMA } from './prompts/intake.js';
 import { SCORECARD_PROMPT, SCORECARD_SCHEMA } from './prompts/scorecard.js';
 import type { ServerProblem } from './types.js';
@@ -48,6 +50,20 @@ if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
       '',
     ].join('\n'),
   );
+}
+
+// The sessions directory holds transcripts, the gradebook and the profile —
+// an unwritable one fails late and confusingly, so the doctor checks it.
+function sessionsWritable(): boolean {
+  try {
+    fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+    const probe = path.join(SESSIONS_DIR, '.write-probe');
+    fs.writeFileSync(probe, '');
+    fs.rmSync(probe);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function errorMessage(err: unknown): string {
@@ -249,7 +265,9 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         userContent: msg.raw,
         schema: INTAKE_SCHEMA as unknown as Record<string, unknown>,
       });
-      const problem: ServerProblem = { ...data, oral: msg.delivery === 'oral' };
+      // The model was prompted for this session's language; stamping it here
+      // is what lets a later language switch detect a stale harness.
+      const problem: ServerProblem = { ...data, language: st.session.language, oral: msg.delivery === 'oral' };
       st.setProblem(problem);
       st.recordUsage(usage);
       st.save();
@@ -425,7 +443,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
       st.session.debrief = data;
       const grade = recordGrade({
         session: s,
-        persona: s.turns.some((t) => t.persona === 'bloomberg') ? 'bloomberg' : s.persona,
+        persona: s.turns.some((t) => t.persona === 'mock') ? 'mock' : s.persona,
         scorecard: data,
       });
       st.save();
@@ -487,7 +505,7 @@ function handleConnection(socket: WebSocket, request: IncomingMessage): void {
         break;
       case 'cv:updated':
         // CV changed via HTTP — rebuild the runtime so the persona context
-        // (behavioral/bloomberg) picks up the new resume text.
+        // (behavioral / full mock) picks up the new resume text.
         resetChat();
         break;
       case 'design:pick': {
@@ -634,7 +652,7 @@ fastify.get('/health', async () => ({ ok: true }));
 fastify.get('/api/progress', async () => ({ grades: listGrades() }));
 // System-design bank: client-safe metadata only (briefs never leave the server).
 fastify.get('/api/design-questions', async () => ({ questions: listDesignQuestions() }));
-// Coding bank: frequency-grounded suggestions (Bloomberg tier-1 + grad top-40).
+// Coding bank: frequency-grounded suggestions (core screen pool + extended set).
 // Seeds are inputs, not answer keys — intake re-dresses them as scenarios.
 fastify.get('/api/coding-questions', async () => ({ questions: listCodingQuestions() }));
 // OOP design bank: client-safe metadata only (briefs never leave the server).
@@ -642,9 +660,38 @@ fastify.get('/api/oop-questions', async () => ({ questions: listOopQuestions() }
 // Debug-&-optimize exercises: titles only — the planted issues stay private.
 fastify.get('/api/debug-exercises', async () => ({ exercises: listDebugExercises() }));
 
+// Setup doctor: what this machine can and cannot do right now. The setup page
+// renders it as a checklist, and every failing row carries its own fix.
+fastify.get('/api/setup', async () => {
+  const tokenLinked = Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN);
+  const loginDir = path.join(os.homedir(), '.claude');
+  const loginFound = fs.existsSync(loginDir);
+  return {
+    model: {
+      // Credentials existing is not the same as credentials working — the
+      // page offers a live probe for that.
+      linked: tokenLinked || loginFound,
+      via: tokenLinked ? 'token' : loginFound ? 'claude-code-login' : null,
+    },
+    languages: await toolchainReport(),
+    // Semantic C++ completion is a bonus, never a requirement.
+    clangd: { available: CLANGD !== null, path: CLANGD },
+    storage: { sessionsDir: SESSIONS_DIR, writable: sessionsWritable() },
+    voice: { note: 'Speech input and playback are browser features — Chrome and Edge support both.' },
+  };
+});
+
+// Live check that model calls actually work on this machine (one cheap call).
+fastify.post('/api/setup/probe', async () => probeModelAccess());
+
+// The practising candidate's profile: role, level, target company, notes.
+// Entirely optional, stored locally, injected into the interviewer personas.
+fastify.get('/api/profile', async () => getProfile());
+fastify.put('/api/profile', async (request) => setProfile((request.body ?? {}) as Partial<Profile>));
+
 // Candidate CV: uploaded as PDF (parsed server-side) or plain text, stored
 // locally in sessions/cv.txt (git-ignored), injected into the behavioral and
-// Bloomberg personas so the interviewer has "read the resume".
+// full-mock personas so the interviewer has "read the resume".
 fastify.addContentTypeParser('application/pdf', { parseAs: 'buffer' }, (_req, body, done) => done(null, body));
 fastify.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done) => done(null, body));
 fastify.get('/api/cv', async () => cvStatus());

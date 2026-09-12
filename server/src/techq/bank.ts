@@ -1,7 +1,7 @@
 import type { TechTopic } from '../../../shared/protocol';
 
 // Tech-knowledge question bank. Authored by a verified research+authoring
-// pass (2026-09): topics chosen from what grad interviews at Bloomberg/C++
+// pass (2026-09): topics chosen from what early-career interviews at systems/C++
 // shops actually test; every question carries the interviewer's private
 // answer key and a follow-up ladder — the drill-down chain is the interview.
 
@@ -98,7 +98,7 @@ export const TECH_BANK: TechQuestion[] = [
   {
     "id": "networking-type-a-url",
     "topic": "networking",
-    "question": "You type bloomberg.com into your browser and hit enter. What happens?",
+    "question": "You type example.com into your browser and hit enter. What happens?",
     "followUps": [
       "Go deeper on DNS — where can the answer come from before anything hits an authoritative server?",
       "What actually happens during the TLS handshake, and what does it cost in round trips?",
