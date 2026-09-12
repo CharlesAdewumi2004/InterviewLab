@@ -1,4 +1,4 @@
-# Interview Lab, fully self contained: Node runtime, the language toolchains
+# InterviewLab, fully self contained: Node runtime, the language toolchains
 # the runner drives, clangd for semantic C++ completion, and the Claude Code
 # CLI for account linking. Model calls use YOUR Claude subscription; no
 # credentials are baked into the image.

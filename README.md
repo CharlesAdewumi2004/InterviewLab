@@ -1,4 +1,4 @@
-# Interview Lab
+# InterviewLab
 
 Mock interview practice that runs on your machine and uses your own Claude
 subscription. Five round types, a code editor the interviewer can see, and a

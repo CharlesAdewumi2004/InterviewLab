@@ -751,7 +751,7 @@ const ready = (await toolchainReport()).filter((l) => l.available).map((l) => l.
 console.log(
   [
     '',
-    `  Interview Lab is running at ${url}`,
+    `  InterviewLab is running at ${url}`,
     '',
     `  Model access  ${access || 'NOT LINKED. Open the Setup page, or run: claude setup-token'}`,
     `  Languages     ${ready.length ? ready.join(', ') : 'none detected. Install a toolchain, then see the Setup page'}`,

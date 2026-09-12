@@ -51,7 +51,7 @@ export class ClangdSession {
   private version = 1;
 
   constructor(initialBuffer: string) {
-    const dir = path.join(os.tmpdir(), 'practice-ide', 'lsp');
+    const dir = path.join(os.tmpdir(), 'interviewlab', 'lsp');
     fs.mkdirSync(dir, { recursive: true });
     // Same LeetCode prelude the compiler force-includes — completions must
     // resolve std symbols in buffers that carry no #include lines.

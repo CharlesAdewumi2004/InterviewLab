@@ -18,7 +18,7 @@ let cppProbe: Promise<void> | null = null;
 
 function probeCpp(): Promise<void> {
   cppProbe ??= (async () => {
-    const probeDir = path.join(os.tmpdir(), 'interview-lab', 'toolchain-probe');
+    const probeDir = path.join(os.tmpdir(), 'interviewlab', 'toolchain-probe');
     fs.mkdirSync(probeDir, { recursive: true });
     fs.writeFileSync(path.join(probeDir, 'p.cpp'), 'int main(){return 0;}\n');
     const opts = { cwd: probeDir, timeoutMs: PROBE_TIMEOUT_MS, env: toolchainEnv() };
@@ -202,7 +202,7 @@ export async function compileAndRun(
   }
 
   const hasHarness = Boolean(problem && problem.harness && problem.tests.length);
-  const workDir = path.join(os.tmpdir(), 'interview-lab', session.id, language);
+  const workDir = path.join(os.tmpdir(), 'interviewlab', session.id, language);
   // A stale binary from a previous run must never be executed after a failed
   // compile: clear the directory each run.
   fs.rmSync(workDir, { recursive: true, force: true });
@@ -274,7 +274,7 @@ export async function toolchainReport(): Promise<
       if (!tool) {
         return { language: meta.id, label: meta.label, available: false, version: null, toolchain: meta.toolchain, install: meta.install };
       }
-      const probeDir = path.join(os.tmpdir(), 'interview-lab');
+      const probeDir = path.join(os.tmpdir(), 'interviewlab');
       fs.mkdirSync(probeDir, { recursive: true });
       const result = await runProcess(tool, runtime.versionArgs, {
         cwd: probeDir,

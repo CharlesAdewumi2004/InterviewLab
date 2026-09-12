@@ -290,8 +290,8 @@ const GO_RT: LanguageRuntime = {
       HOME: workDir,
       // Shared across runs (the per-run work dir is wiped): a cold Go build
       // cache costs seconds on every single Run.
-      GOCACHE: path.join(os.tmpdir(), 'interview-lab', 'gocache'),
-      GOPATH: path.join(os.tmpdir(), 'interview-lab', 'gopath'),
+      GOCACHE: path.join(os.tmpdir(), 'interviewlab', 'gocache'),
+      GOPATH: path.join(os.tmpdir(), 'interviewlab', 'gopath'),
       GOFLAGS: '-mod=mod',
       GO111MODULE: 'on',
       GOTOOLCHAIN: 'local',
